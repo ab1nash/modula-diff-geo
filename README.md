@@ -4,7 +4,7 @@
   <img alt="modula logo" src="assets/modula.svg">
 </picture>
 
-[![Tests](https://github.com/modula-systems/modula/actions/workflows/tests.yml/badge.svg)](https://github.com/modula-systems/modula/actions/workflows/tests.yml)
+[![Test bed](https://github.com/modula-systems/modula/workflows/Geometric%20Covariance%20Tests/badge.svg)](https://github.com/modula-systems/modula/actions/workflows/tests.yml)
 
 Modula is a deep learning library and a deep learning theory built hand-in-hand. Modula disentangles complex neural networks and turns them into structured mathematical objects called modules. This makes training faster and easier to scale, while also providing tools for understanding the properties of the trained network. Modula is built on top of [JAX](https://github.com/google/jax). More information is available in the [Modula docs](https://docs.modula.systems).
 
