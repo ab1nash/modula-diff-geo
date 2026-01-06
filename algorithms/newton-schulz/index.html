@@ -1,0 +1,534 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+<meta property="og:title" content="Newton-Schulz" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://modula.systems/algorithms/newton-schulz/" />
+<meta property="og:site_name" content="Modula" />
+<meta property="og:description" content="On this page, we will work out a family of iterative algorithms for “orthogonalizing” a matrix, by which we mean transforming either the rows or the columns of the matrix to form an orthonormal set..." />
+<meta property="og:image" content="https://docs.modula.systems/_static/logo-square.jpeg" />
+<meta property="og:image:alt" content="Modula" />
+<meta name="description" content="On this page, we will work out a family of iterative algorithms for “orthogonalizing” a matrix, by which we mean transforming either the rows or the columns of the matrix to form an orthonormal set..." />
+<link rel="index" title="Index" href="../../genindex/"><link rel="search" title="Search" href="../../search/"><link rel="next" title="Manifold duality maps" href="../manifold/"><link rel="prev" title="Reading list" href="../../intro/reading-list/">
+        <link rel="prefetch" href="../../_static/logo-light.svg" as="image">
+        <link rel="prefetch" href="../../_static/logo-dark.svg" as="image">
+
+    <link rel="shortcut icon" href="../../_static/favicon.ico"><!-- Generated with Sphinx 7.0.0 and Furo 2025.12.19 -->
+        <title>Newton-Schulz - docs.modula.systems</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?digest=8bfd17e78cc47c62ac1c32270c918bcbddd8698e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/tabs.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.4cbf315f70debaebd550c87a6162cf0f.min.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?digest=c2381d17322d81725993bfddb61bde80003e8cc4" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../"><div class="brand">docs.modula.systems</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../">
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo only-light" src="../../_static/logo-light.svg" alt="Light Logo"/>
+    <img class="sidebar-logo only-dark" src="../../_static/logo-dark.svg" alt="Dark Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../../search/" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Introduction:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/quickstart/">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/whats-in-a-norm/">What’s in a norm?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../intro/reading-list/">Reading list</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Algorithms:</span></p>
+<ul class="current">
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Newton-Schulz</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../manifold/">Manifold duality maps</a><input aria-label="Toggle navigation of Manifold duality maps" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../manifold/hypersphere/">Hypersphere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../manifold/orthogonal/">Orthogonal manifold</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../manifold/stiefel/">Stiefel manifold</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../examples/hello-world/">Hello, World!</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples/hello-mnist/">Hello, MNIST!</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples/hello-gpt/">Hello, GPT!</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples/weight-erasure/">Weight erasure</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More on Modula:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../faq/">Modula FAQ</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/modula-systems/modula">Modula codebase</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://modula.systems/">Modula homepage</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/modula-systems/modula/blob/main/docs/source/algorithms/newton-schulz.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/modula-systems/modula/edit/main/docs/source/algorithms/newton-schulz.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="newton-schulz">
+<h1>Newton-Schulz<a class="headerlink" href="#newton-schulz" title="Permalink to this heading">¶</a></h1>
+<p>On this page, we will work out a family of iterative algorithms for “orthogonalizing” a matrix, by which we mean transforming either the rows or the columns of the matrix to form an orthonormal set of vectors. These so-called “Newton-Schulz” iterations are a useful family of algorithms to keep in your toolbox. We proposed using these iterations for neural net optimization in our paper:</p>
+<blockquote>
+<div><div class="line-block">
+<div class="line">📗 <a class="reference external" href="https://arxiv.org/abs/2410.21265">Modular duality in deep learning</a></div>
+<div class="line-block">
+<div class="line">Jeremy Bernstein &amp; Laker Newhouse</div>
+<div class="line">arXiv 2024</div>
+</div>
+</div>
+</div></blockquote>
+<p>Before that, we included the iteration in an appendix of our <a class="reference external" href="https://arxiv.org/abs/2409.20325">workshop paper</a>, and before that I actually worked out <a class="reference external" href="https://x.com/jxbz/status/1821610284223791156">the ideas</a>
+<a class="reference external" href="https://x.com/jxbz/status/1821685090709336319">directly</a>
+<a class="reference external" href="https://x.com/jxbz/status/1824076109647925260">on</a> <a class="reference external" href="https://x.com/tmjlarge/status/1824243567037972768">Twitter</a> with my collaborator Tim Large. We used a particular <a class="reference internal" href="#a-cursed-quintic-iteration"><span class="std std-ref">cursed quintic iteration</span></a> in the Muon optimizer, which was used to set speed records for training NanoGPT:</p>
+<blockquote>
+<div><div class="line-block">
+<div class="line">📕 <a class="reference external" href="https://kellerjordan.github.io/posts/muon/">Muon: An optimizer for hidden layers in neural networks</a></div>
+<div class="line-block">
+<div class="line">Keller Jordan, Yuchen Jin, Vlado Boza, Jiacheng You, Franz Cesista, Laker Newhouse &amp; Jeremy Bernstein</div>
+<div class="line">blog post 2024</div>
+</div>
+</div>
+</div></blockquote>
+<p>Since then, the iteration has been applied in new optimizers such as <a class="reference external" href="https://arxiv.org/abs/2502.07529">Scion</a>, <a class="reference external" href="https://nikhilvyas.github.io/SOAP_Muon.pdf">improved-SOAP</a> and <a class="reference external" href="https://github.com/ZQZCalin/trainit/blob/master/optimizers/muon/mango_report.pdf">Mango</a>. At the bottom of this page, we provide further <a class="reference internal" href="#id1"><span class="std std-ref">historical connections</span></a> on the techniques.</p>
+<section id="problem-statement">
+<h2>Problem statement<a class="headerlink" href="#problem-statement" title="Permalink to this heading">¶</a></h2>
+<p>We wish to approximate the map that sends a matrix <span class="math notranslate nohighlight">\(M\in\mathbb{R}^{m\times n}\)</span> with reduced SVD <span class="math notranslate nohighlight">\(M = U \Sigma V^\top\)</span> to the matrix <span class="math notranslate nohighlight">\(U V^\top\)</span>. This map can be thought of as “snapping the singular values of <span class="math notranslate nohighlight">\(M\)</span> to one”—with the exception that the iterations we consider will actually fix zero singular values at zero. But ignoring this detail, the map is given by:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[M = U \Sigma V^\top \mapsto U V^\top.\]</div>
+</div>
+<p>This operation is sometimes referred to as <a class="reference external" href="https://en.wikipedia.org/wiki/Orthogonalization">“symmetric orthogonalization”</a> because no row or column of the matrix <span class="math notranslate nohighlight">\(M\)</span> is treated as special in the procedure. This is in contrast to <a class="reference external" href="https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process">Gram-Schmidt orthogonalization</a>, which involves first picking out a certain row or column vector as special and then orthogonalizing the remaining vectors against this vector.</p>
+</section>
+<section id="odd-polynomial-iterations">
+<h2>Odd polynomial iterations<a class="headerlink" href="#odd-polynomial-iterations" title="Permalink to this heading">¶</a></h2>
+<p>We will consider iterations based on odd matrix polynomials of the form:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[p(X) = a X + b X X^\top X + c (X X^\top)^2 X + ...\]</div>
+</div>
+<p>which acts on a matrix <span class="math notranslate nohighlight">\(X \in \mathbb{R}^{m \times n}\)</span>. The important property of an odd matrix polynomial of this form is that it <em>commutes</em> with the singular value decomposition, in the sense that:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[p(U \Sigma V^\top) = U p(\Sigma) V^\top.\]</div>
+</div>
+<p>So, to apply an odd polynomial <span class="math notranslate nohighlight">\(p\)</span> to the singular values, it is enough to apply it to the overall matrix <span class="math notranslate nohighlight">\(X\)</span>. Since the matrix of singular values <span class="math notranslate nohighlight">\(\Sigma\)</span> is diagonal, this reduces to applying the scalar polynomial</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f(x) = a x + bx^3 + cx^5 + ...\]</div>
+</div>
+<p>to the diagonal entries of <span class="math notranslate nohighlight">\(\Sigma\)</span>. In what follows we will simply specify formulae for scalar polynomials <span class="math notranslate nohighlight">\(f\)</span> with the understanding that they will be extended to matrix polynomials <span class="math notranslate nohighlight">\(p\)</span> as specified above. Then our task is just to produce odd scalar polynomials <span class="math notranslate nohighlight">\(f(x)\)</span> that when iterated like <span class="math notranslate nohighlight">\(f \circ f \circ f \circ ... \circ f(x)\)</span> converge to the sign function <span class="math notranslate nohighlight">\(\operatorname{sign}(x)\)</span>.</p>
+<p>While the classical way to select these polynomials is by Taylor-approximating the sign function <a class="reference external" href="https://www.jstor.org/stable/2949484">(e.g. Björck &amp; Bowie, 1971)</a>, this only leads to a very restricted set of polynomials. I had the idea of treating the polynomial coefficients as free parameters to be tuned for specific performance characteristics.</p>
+</section>
+<section id="a-cubic-iteration">
+<h2>A cubic iteration<a class="headerlink" href="#a-cubic-iteration" title="Permalink to this heading">¶</a></h2>
+<p>We begin with the simplest Newton-Schulz iteration, based on the cubic polynomial:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f(x) = \frac{3}{2}x - \frac{1}{2}x^3.\]</div>
+</div>
+<p>We plot <span class="math notranslate nohighlight">\(f(x)\)</span> on the left and on the right we plot <span class="math notranslate nohighlight">\(f(x)\)</span> iterated five times to yield <span class="math notranslate nohighlight">\(f(f(f(f(f(x)))))\)</span>.</p>
+<iframe src="https://www.desmos.com/calculator/qzvof94grn?embed" width="47%" height="300px" frameborder="0" style="margin-right: 4%"></iframe>
+<iframe src="https://www.desmos.com/calculator/2d0ekimums?embed" width="47%" height="300px" frameborder="0"></iframe><p>As can be seen, by iterating <span class="math notranslate nohighlight">\(f\)</span> several times, the graph starts to resemble that of the sign function <span class="math notranslate nohighlight">\(\operatorname{sign}(x)\)</span>, at least on the interval close to the origin. In fact, you can check that if we iterate <span class="math notranslate nohighlight">\(f\)</span> an infinite number of times, we will obtain precisely the sign function on the interval <span class="math notranslate nohighlight">\([-\sqrt{3},\sqrt{3}]\)</span>. As a consequence, if we iterate the corresponding matrix polynomial <span class="math notranslate nohighlight">\(p(X) = \frac{3}{2}X - \frac{1}{2}XX^\top X\)</span>, we will approximate the sign function element-wise on the singular values of <span class="math notranslate nohighlight">\(X\)</span>, thereby orthogonalising the matrix. The only caveat is that we need to ensure all singular values of the initial matrix lie in the interval <span class="math notranslate nohighlight">\([-\sqrt{3},\sqrt{3}]\)</span>. We can achieve this via a simple pre-processing step, mapping <span class="math notranslate nohighlight">\(X \mapsto X / \|X\|_F\)</span>.</p>
+</section>
+<section id="a-quintic-iteration">
+<h2>A quintic iteration<a class="headerlink" href="#a-quintic-iteration" title="Permalink to this heading">¶</a></h2>
+<p>Using a higher-order polynomial provides more degrees of freedom in our design space, which we can use to obtain faster convergence. In this section, we consider the quintic iteration given by:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f(x) = 3x - \frac{16}{5}x^3 + \frac{6}{5}x^5.\]</div>
+</div>
+<p>Again, we plot one and five iterations of this polyomial:</p>
+<iframe src="https://www.desmos.com/calculator/fjjjpsnl2g?embed" width="47%" height="300px" frameborder="0" style="margin-right: 4%"></iframe>
+<iframe src="https://www.desmos.com/calculator/1aqrfjge22?embed" width="47%" height="300px" frameborder="0"></iframe><p>As can be seen, after 5 iterations the quintic iteration has achieved a substantially closer approximation to the sign function than the cubic iteration, at least on the interval <span class="math notranslate nohighlight">\([-3/2,3/2]\)</span>. However, the approximation exhibits some oscillatory behaviour close to the origin.</p>
+</section>
+<section id="a-cursed-quintic-iteration">
+<h2>A cursed quintic iteration<a class="headerlink" href="#a-cursed-quintic-iteration" title="Permalink to this heading">¶</a></h2>
+<p>We applied a Newton-Schulz iteration in the <a class="reference external" href="https://kellerjordan.github.io/posts/muon/">Muon optimizer</a> used in the <a class="reference external" href="https://github.com/KellerJordan/modded-nanogpt">NanoGPT speedrun</a>. Keller experimented with tuning the coefficients in the iteration and found that the most important thing for fast convergence of the optimizer was to inflate the small singular values as fast as possible. To keep the wall-clock time low, we needed to do this in the smallest number of iterations possible. This is achieved by making the first coefficient in the polynomial as large as possible, thereby maximizing the slope of the polynomial at <span class="math notranslate nohighlight">\(x=0\)</span>. I had the idea for using a non-convergent iteration, and Keller settled on the following:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f(x) = 3.4445x - 4.7750x^3 + 2.0315x^5.\]</div>
+</div>
+<p>Plotting the polynomial after one and five iterations, we see some peculiar behaviour:</p>
+<iframe src="https://www.desmos.com/calculator/4xsjfwa5vh?embed" width="47%" height="300px" frameborder="0" style="margin-right: 4%"></iframe>
+<iframe src="https://www.desmos.com/calculator/9yjpijk1fv?embed" width="47%" height="300px" frameborder="0"></iframe><p>This iteration <em>oscillates</em> and in fact <em>does not converge</em>! To see why, observe that a convergent iteration must at the very least satisfy <span class="math notranslate nohighlight">\(f(1) = 1\)</span> so that <span class="math notranslate nohighlight">\(x=1\)</span> is a fixed point. In turn, this implies that the sum of the coefficients should equal 1. But for Keller’s polynomial, the coefficients sum to</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[3.4445 - 4.7750 + 2.0315 = 0.701 \neq 1.\]</div>
+</div>
+<p>In short, the cursed quintic iteration sacrifices convergence for speed.</p>
+</section>
+<section id="jiacheng-s-six-step">
+<h2>Jiacheng’s six-step<a class="headerlink" href="#jiacheng-s-six-step" title="Permalink to this heading">¶</a></h2>
+<p>Another idea is that we do not need to use the same polynomial coefficients at each step of the iteration. Using different coefficients at each step provides even more degrees of freedom to achieve desirable behaviour. For example, <a class="reference external" href="https://twitter.com/YouJiacheng">You Jiacheng</a> found the following iteration <a class="reference external" href="https://gist.github.com/YouJiacheng/393c90cbdc23b09d5688815ba382288b/5bff1f7781cf7d062a155eecd2f13075756482ae">by computational search</a>:</p>
+<iframe src="https://www.desmos.com/calculator/a2jxvmompc?embed" width="47%" height="300px" frameborder="0" style="margin-right: 4%"></iframe>
+<iframe src="https://www.desmos.com/calculator/hta59syabv?embed" width="47%" height="300px" frameborder="0"></iframe><p>The six quintic polynomials on the left are executed in sequence. The last quintic (the orange curve) has a very flat slope close to <span class="math notranslate nohighlight">\(x=1\)</span>, which has the effect of flattening out the oscillations present after the first five steps. The result is the very good approximation to the sign function on the right.</p>
+<p>I have integrated this iteration as a basic primitive in <a class="reference external" href="https://github.com/modula-systems/modula/blob/aed70cddf2d3ab74fa218b1377840d1fd795cfcf/modula/atom.py#L6C1-L31C13">Modula</a> using the following JAX implementation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">jax.numpy</span> <span class="k">as</span> <span class="nn">jnp</span>
+
+<span class="k">def</span> <span class="nf">orthogonalize</span><span class="p">(</span><span class="n">M</span><span class="p">):</span>
+   <span class="c1"># by @YouJiacheng (with stability loss idea from @leloykun)</span>
+   <span class="c1"># https://twitter.com/YouJiacheng/status/1893704552689303901</span>
+   <span class="c1"># https://gist.github.com/YouJiacheng/393c90cbdc23b09d5688815ba382288b/5bff1f7781cf7d062a155eecd2f13075756482ae</span>
+
+   <span class="n">abc_list</span> <span class="o">=</span> <span class="p">[</span>
+      <span class="p">(</span><span class="mi">3955</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">8306</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">5008</span><span class="o">/</span><span class="mi">1024</span><span class="p">),</span>
+      <span class="p">(</span><span class="mi">3735</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">6681</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">3463</span><span class="o">/</span><span class="mi">1024</span><span class="p">),</span>
+      <span class="p">(</span><span class="mi">3799</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">6499</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">3211</span><span class="o">/</span><span class="mi">1024</span><span class="p">),</span>
+      <span class="p">(</span><span class="mi">4019</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">6385</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">2906</span><span class="o">/</span><span class="mi">1024</span><span class="p">),</span>
+      <span class="p">(</span><span class="mi">2677</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">3029</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">1162</span><span class="o">/</span><span class="mi">1024</span><span class="p">),</span>
+      <span class="p">(</span><span class="mi">2172</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span> <span class="o">-</span><span class="mi">1833</span><span class="o">/</span><span class="mi">1024</span><span class="p">,</span>  <span class="mi">682</span><span class="o">/</span><span class="mi">1024</span><span class="p">)</span>
+   <span class="p">]</span>
+
+   <span class="n">transpose</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+   <span class="k">if</span> <span class="n">transpose</span><span class="p">:</span>
+      <span class="n">M</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">T</span>
+   <span class="n">M</span> <span class="o">=</span> <span class="n">M</span> <span class="o">/</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+   <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">abc_list</span><span class="p">:</span>
+      <span class="n">A</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">M</span>
+      <span class="n">I</span> <span class="o">=</span> <span class="n">jnp</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+      <span class="n">M</span> <span class="o">=</span> <span class="n">M</span> <span class="o">@</span> <span class="p">(</span><span class="n">a</span> <span class="o">*</span> <span class="n">I</span> <span class="o">+</span> <span class="n">b</span> <span class="o">*</span> <span class="n">A</span> <span class="o">+</span> <span class="n">c</span> <span class="o">*</span> <span class="n">A</span> <span class="o">@</span> <span class="n">A</span><span class="p">)</span>
+   <span class="k">if</span> <span class="n">transpose</span><span class="p">:</span>
+      <span class="n">M</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">T</span>
+   <span class="k">return</span> <span class="n">M</span>
+</pre></div>
+</div>
+<p>I also recommend checking out the <a class="reference external" href="https://leloykun.github.io/ponder/muon-opt-coeffs/">writeup</a> of Franz Cesista (&#64;leloykun) on this topic.</p>
+</section>
+<section id="designing-your-own-iteration">
+<h2>Designing your own iteration<a class="headerlink" href="#designing-your-own-iteration" title="Permalink to this heading">¶</a></h2>
+<p>Designing these polynomial iterations can be a surprisingly fun exercise. If you’d like to explore designing your own iteration, you can start with a polynomial of the form:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f(x) = a x + b x^3 + c x^5 + d x^7 + e x^9 + ...\]</div>
+</div>
+<p>And then choose the coefficients <span class="math notranslate nohighlight">\(a,b,c,d,e,...\)</span> to achieve your desired behaviour. Three important things to consider are:</p>
+<ul class="simple">
+<li><p>What order do you want to truncate your polynomial at? A higher-order iteration can converge in fewer steps, but each step is more expensive. There is a trade-off here.</p></li>
+<li><p>Do you want the iterations to converge? If so, you at least need to enforce that the coefficients sum to 1 so that <span class="math notranslate nohighlight">\(f(1) = 1\)</span>. You could consider enforcing additional derivative conditions, such as that <span class="math notranslate nohighlight">\(\partial f / \partial x = 0\)</span> at <span class="math notranslate nohighlight">\(x=1\)</span>, to further stabilize the convergence.</p></li>
+<li><p>Do you want to use different polynomials on different steps? This adds complexity but provides a larger design space.</p></li>
+</ul>
+<p>After making these decisions, you may have leftover degrees of freedom. A fun way to fix these degrees of freedom is to open up <a class="reference external" href="https://desmos.com">Desmos</a> and play around with the coefficients using sliders.</p>
+</section>
+<section id="id1">
+<h2>Historical connections<a class="headerlink" href="#id1" title="Permalink to this heading">¶</a></h2>
+<p>The procedure of symmetric orthogonalization appears in a number of different contexts:</p>
+<ul class="simple">
+<li><p>it is used in solving the <a class="reference external" href="https://en.wikipedia.org/wiki/Orthogonal_Procrustes_problem">orthogonal Procrustes problem</a>.</p></li>
+<li><p>it computes the “orthogonal polar factor” in the <a class="reference external" href="https://en.wikipedia.org/wiki/Polar_decomposition">polar decomposition</a> of a matrix.</p></li>
+<li><p>it was used by <a class="reference external" href="https://en.wikipedia.org/wiki/Per-Olov_L%C3%B6wdin">Per-Olov Löwdin</a> in the 1950s to perform atomic and molecular orbital calculations.</p></li>
+<li><p>it is used for doing <a class="reference external" href="https://proceedings.mlr.press/v28/jaggi13">Frank-Wolfe optimization</a> over the spectral norm ball.</p></li>
+<li><p>it was proposed for deep learning optimization in the paper <a class="reference external" href="https://papers.nips.cc/paper_files/paper/2015/hash/f50a6c02a3fc5a3a5d4d9391f05f3efc-Abstract.html">“preconditioned spectral descent for deep learning”</a>—albeit computed via matrix sketching rather than Newton-Schulz iterations.</p></li>
+<li><p>A Newton-Schulz iteration was used to orthogonalize the weight matrices (but not the updates!) in deep learning in the paper <a class="reference external" href="https://arxiv.org/abs/1811.05381">“sorting out Lipschitz function approximation”</a>.</p></li>
+</ul>
+<p>The earliest references on the Newton-Schulz iteration itself seem to be <a class="reference external" href="https://epubs.siam.org/doi/10.1137/0707031">“some iterative methods for improving orthonormality”</a> (Kovarik, 1970) and <a class="reference external" href="https://www.jstor.org/stable/2949484">“an iterative algorithm for computing the best estimate of an orthogonal matrix”</a> (Björck &amp; Bowie, 1971). To justify using the name “Newton-Schulz” for these iterations, we note that Higham used it in <a class="reference external" href="https://convexoptimization.com/TOOLS/procrust94.pdf">these slides</a>. The idea of graphically tuning the coefficients of the iteration to obtain certain performance characteristics is, to the best of my knowledge, our own original idea.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../manifold/">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Manifold duality maps</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="../../intro/reading-list/">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Reading list</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2024, Jeremy Bernstein
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link " href="https://github.com/modula-systems/modula" aria-label="GitHub">
+                <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+            </a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Newton-Schulz</a><ul>
+<li><a class="reference internal" href="#problem-statement">Problem statement</a></li>
+<li><a class="reference internal" href="#odd-polynomial-iterations">Odd polynomial iterations</a></li>
+<li><a class="reference internal" href="#a-cubic-iteration">A cubic iteration</a></li>
+<li><a class="reference internal" href="#a-quintic-iteration">A quintic iteration</a></li>
+<li><a class="reference internal" href="#a-cursed-quintic-iteration">A cursed quintic iteration</a></li>
+<li><a class="reference internal" href="#jiacheng-s-six-step">Jiacheng’s six-step</a></li>
+<li><a class="reference internal" href="#designing-your-own-iteration">Designing your own iteration</a></li>
+<li><a class="reference internal" href="#id1">Historical connections</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/scripts/furo.js"></script>
+    <script src="../../_static/clipboard.min.js"></script>
+    <script src="../../_static/copybutton.js"></script>
+    <script src="../../_static/tabs.js"></script>
+    <script src="../../_static/design-tabs.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>
