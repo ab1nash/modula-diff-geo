@@ -11,3 +11,6 @@ docs/source/examples/assets/
 examples/.ipynb_checkpoints/
 examples/data/*
 !examples/data/*.py
+
+ignore-docs/
+ignore-docs/*

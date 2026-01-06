@@ -20,6 +20,17 @@ dependencies = [
     "jax>=0.5.0"
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+]
+dev = [
+    "modula[test]",
+    "ruff>=0.1.0",
+]
+
 [tool.setuptools]
 packages = ["modula"]
 
@@ -28,3 +39,29 @@ packages = ["modula"]
 "Repository" = "https://github.com/modula-systems/modula"
 "Bug Tracker" = "https://github.com/modula-systems/modula/issues"
 "Documentation" = "https://docs.modula.systems/"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "phase1: core type system tests",
+    "phase2: dualization tests",
+    "phase3: atomic primitive tests",
+    "phase4: composition tests",
+    "phase5: information geometry tests",
+    "invariant: mathematical invariant verification",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["modula"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

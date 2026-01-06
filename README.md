@@ -4,6 +4,8 @@
   <img alt="modula logo" src="assets/modula.svg">
 </picture>
 
+[![Tests](https://github.com/modula-systems/modula/actions/workflows/tests.yml/badge.svg)](https://github.com/modula-systems/modula/actions/workflows/tests.yml)
+
 Modula is a deep learning library and a deep learning theory built hand-in-hand. Modula disentangles complex neural networks and turns them into structured mathematical objects called modules. This makes training faster and easier to scale, while also providing tools for understanding the properties of the trained network. Modula is built on top of [JAX](https://github.com/google/jax). More information is available in the [Modula docs](https://docs.modula.systems).
 
 # Installation
@@ -62,6 +64,41 @@ weights = mlp.project(weights)
 ```
 
 In short, Modula lets us think about the weight space of our neural network as a somewhat classical optimization space, complete with duality and projection operations.
+
+# Geometric Covariance Extension
+
+This branch extends Modula with differential geometry primitives for covariant pattern mining. The goal is to equip neural network components with explicit geometric structure—distinguishing vectors from covectors, handling twisted forms for orientation-sensitive data, and supporting asymmetric Finsler metrics for directed relationships.
+
+**Key concepts being implemented:**
+- **Tensor type system**: Contravariant (vectors) vs covariant (gradients) with proper transformation laws
+- **Twisted forms**: Orientation-sensitive tensors that flip sign under reflection (for chiral data)
+- **Finsler metrics**: Asymmetric norms where F(v) ≠ F(-v), modeling directional cost (causality, irreversibility)
+- **Geometric dualization**: Extending Newton-Schulz to non-Euclidean weight spaces
+
+## Testing
+
+The test suite verifies mathematical invariants hold through implementation:
+
+```bash
+# Install with test dependencies
+pip install -e ".[test]"
+
+# Run all tests
+pytest tests/ -v
+
+# Run by phase
+pytest tests/ -m phase1 -v  # Core type system (111 tests)
+pytest tests/ -m phase2 -v  # Dualization & Finsler (45 tests)
+
+# Run mathematical invariant checks only
+pytest tests/ -m invariant -v
+```
+
+**Test infrastructure includes:**
+- `tests/geometry/generators.py` — Random geometric object factories
+- `tests/geometry/invariants.py` — Mathematical assertion utilities
+- Verification of transformation laws: v' = J⁻¹v (contravariant), α' = αJ (covariant)
+- Finsler metric properties: positive homogeneity, strong convexity, asymmetry
 
 # References
 

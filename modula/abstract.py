@@ -24,15 +24,15 @@ class Module:
             self.tare(relative = absolute / self.mass)
         else:
             self.mass *= relative
-            for m in self.children:
-                m.tare(relative = relative)
+            for childModule in self.children:
+                childModule.tare(relative=relative)
 
     def jit(self):
         self.forward = jax.jit(self.forward)
         self.project = jax.jit(self.project)
         self.dualize = jax.jit(self.dualize)
 
-    def forward(self, x, w):
+    def forward(self, inputData, weightsList):
         # Input and weight list --> output
         raise NotImplementedError
 
@@ -40,35 +40,40 @@ class Module:
         # Return a weight list.
         raise NotImplementedError
 
-    def project(self, w):
+    def project(self, weightsList):
         # Return a weight list.
         raise NotImplementedError
 
-    def dualize(self, grad_w, target_norm):
+    def dualize(self, weightGradsList, targetNorm):
         # Weight gradient list and number --> normalized weight gradient list
         raise NotImplementedError
 
-    def __matmul__(self, other):
-        if isinstance(other, tuple):
-            other = TupleModule(other)
-        return CompositeModule(self, other)
+    def __matmul__(self, otherModule):
+        if isinstance(otherModule, tuple):
+            otherModule = TupleModule(otherModule)
+        return CompositeModule(self, otherModule)
 
-    def __add__(self, other):
-        return Add() @ TupleModule((self, other))
+    def __add__(self, otherModule):
+        return Add() @ TupleModule((self, otherModule))
 
-    def __mul__(self, other):
-        assert other != 0, "cannot multiply a module by zero"
-        return self @ Mul(other)
+    def __mul__(self, scalar):
+        assert scalar != 0, "cannot multiply a module by zero"
+        return self @ Mul(scalar)
 
     def __rmul__(self, scalar):
         return Mul(scalar) @ self
 
-    def __pow__(self, n):
-        assert n >= 0 and n % 1 == 0, "nonnegative integer powers only"
-        return copy.deepcopy(self) @ (self ** (n-1)) if n > 0 else Identity()
+    def __pow__(self, exponent):
+        assert exponent >= 0 and exponent % 1 == 0, "nonnegative integer powers only"
+        return (
+            copy.deepcopy(self) @ (self ** (exponent - 1))
+            if exponent > 0
+            else Identity()
+        )
 
-    def __call__(self, x, w):
-        return self.forward(x, w)
+    def __call__(self, inputData, weightsList):
+        return self.forward(inputData, weightsList)
+
 
 class Atom(Module):
     def __init__(self):
@@ -86,97 +91,127 @@ class Bond(Module):
     def initialize(self, key):
         return []
 
-    def project(self, w):
+    def project(self, weightsList):
         return []
 
-    def dualize(self, grad_w, target_norm=1.0):
+    def dualize(self, weightGradsList, targetNorm=1.0):
         return []
+
 
 class CompositeModule(Module):
-    def __init__(self, m1, m0):
+
+    def __init__(self, outerModule, innerModule):
         super().__init__()
-        self.children = (m0, m1)
+        self.children = (innerModule, outerModule)
 
-        self.atoms       = m0.atoms + m1.atoms
-        self.bonds       = m0.bonds + m1.bonds
-        self.smooth      = m0.smooth and m1.smooth
-        self.mass        = m0.mass + m1.mass
-        self.sensitivity = m0.sensitivity * m1.sensitivity
+        self.atoms = innerModule.atoms + outerModule.atoms
+        self.bonds = innerModule.bonds + outerModule.bonds
+        self.smooth = innerModule.smooth and outerModule.smooth
+        self.mass = innerModule.mass + outerModule.mass
+        self.sensitivity = innerModule.sensitivity * outerModule.sensitivity
 
-    def forward(self, x, w):
-        m0, m1 = self.children
-        w0 = w[:m0.atoms]
-        w1 = w[m0.atoms:]
-        x0 = m0.forward(x, w0)
-        x1 = m1.forward(x0, w1)
-        return x1
+    def forward(self, inputData, weightsList):
+        innerModule, outerModule = self.children
+        innerWeightsList = weightsList[: innerModule.atoms]
+        outerWeightsList = weightsList[innerModule.atoms :]
+        intermediateOutput = innerModule.forward(inputData, innerWeightsList)
+        finalOutput = outerModule.forward(intermediateOutput, outerWeightsList)
+        return finalOutput
 
     def initialize(self, key):
-        m0, m1 = self.children
+        innerModule, outerModule = self.children
         key, subkey = jax.random.split(key)
-        return m0.initialize(key) + m1.initialize(subkey)
+        return innerModule.initialize(key) + outerModule.initialize(subkey)
 
-    def project(self, w):
-        m0, m1 = self.children
-        w0 = w[:m0.atoms]
-        w1 = w[m0.atoms:]
-        return m0.project(w0) + m1.project(w1)
+    def project(self, weightsList):
+        innerModule, outerModule = self.children
+        innerWeightsList = weightsList[: innerModule.atoms]
+        outerWeightsList = weightsList[innerModule.atoms :]
+        return innerModule.project(innerWeightsList) + outerModule.project(
+            outerWeightsList
+        )
 
-    def dualize(self, grad_w, target_norm=1.0):
+    def dualize(self, weightGradsList, targetNorm=1.0):
         if self.mass > 0:
-            m0, m1 = self.children
-            grad_w0, grad_w1 = grad_w[:m0.atoms], grad_w[m0.atoms:]
-            d_w0 = m0.dualize(grad_w0, target_norm = target_norm * m0.mass / self.mass / m1.sensitivity)
-            d_w1 = m1.dualize(grad_w1, target_norm = target_norm * m1.mass / self.mass)
-            d_w = d_w0 + d_w1
+            innerModule, outerModule = self.children
+            innerWeightGradsList, outerWeightGradsList = (
+                weightGradsList[: innerModule.atoms],
+                weightGradsList[innerModule.atoms :],
+            )
+            innerDualWeightsList = innerModule.dualize(
+                innerWeightGradsList,
+                targetNorm=targetNorm
+                * innerModule.mass
+                / self.mass
+                / outerModule.sensitivity,
+            )
+            outerDualWeightsList = outerModule.dualize(
+                outerWeightGradsList,
+                targetNorm=targetNorm * outerModule.mass / self.mass,
+            )
+            dualWeightsList = innerDualWeightsList + outerDualWeightsList
         else:
-            d_w = [0 * grad_weight for grad_weight in grad_w]
-        return d_w
+            dualWeightsList = [
+                0 * gradWeightMatrix for gradWeightMatrix in weightGradsList
+            ]
+        return dualWeightsList
+
 
 class TupleModule(Module):
-    def __init__(self, python_tuple_of_modules):
-        super().__init__()
-        self.children = python_tuple_of_modules
-        self.atoms       = sum(m.atoms       for m in self.children)
-        self.bonds       = sum(m.bonds       for m in self.children)
-        self.smooth      = all(m.smooth      for m in self.children)
-        self.mass        = sum(m.mass        for m in self.children)
-        self.sensitivity = sum(m.sensitivity for m in self.children)
 
-    def forward(self, x, w):
-        output_list = []
-        for m in self.children:
-            output = m.forward(x, w[:m.atoms])
-            output_list.append(output)
-            w = w[m.atoms:]
-        return output_list
+    def __init__(self, pythonTupleOfModules):
+        super().__init__()
+        self.children = pythonTupleOfModules
+        self.atoms = sum(childModule.atoms for childModule in self.children)
+        self.bonds = sum(childModule.bonds for childModule in self.children)
+        self.smooth = all(childModule.smooth for childModule in self.children)
+        self.mass = sum(childModule.mass for childModule in self.children)
+        self.sensitivity = sum(childModule.sensitivity for childModule in self.children)
+
+    def forward(self, inputData, weightsList):
+        outputList = []
+        for childModule in self.children:
+            childOutput = childModule.forward(
+                inputData, weightsList[: childModule.atoms]
+            )
+            outputList.append(childOutput)
+            weightsList = weightsList[childModule.atoms :]
+        return outputList
 
     def initialize(self, key):
-        w = []
-        for m in self.children:
+        weightsList = []
+        for childModule in self.children:
             key, subkey = jax.random.split(key)
-            w += m.initialize(subkey)
-        return w
+            weightsList += childModule.initialize(subkey)
+        return weightsList
 
-    def project(self, w):
-        projected_w = []
-        for m in self.children:
-            projected_w_m = m.project(w[:m.atoms])
-            projected_w += projected_w_m
-            w = w[m.atoms:]
-        return projected_w
+    def project(self, weightsList):
+        projectedWeightsList = []
+        for childModule in self.children:
+            childProjectedWeightsList = childModule.project(
+                weightsList[: childModule.atoms]
+            )
+            projectedWeightsList += childProjectedWeightsList
+            weightsList = weightsList[childModule.atoms :]
+        return projectedWeightsList
 
-    def dualize(self, grad_w, target_norm=1.0):
+    def dualize(self, weightGradsList, targetNorm=1.0):
         if self.mass > 0:
-            d_w = []
-            for m in self.children:
-                grad_w_m = grad_w[:m.atoms]
-                d_w_m = m.dualize(grad_w_m, target_norm = target_norm * m.mass / self.mass)
-                d_w += d_w_m
-                grad_w = grad_w[m.atoms:]
+            dualWeightsList = []
+            for childModule in self.children:
+                childWeightGradsList = weightGradsList[: childModule.atoms]
+                childDualWeightsList = childModule.dualize(
+                    childWeightGradsList,
+                    targetNorm=targetNorm * childModule.mass / self.mass,
+                )
+                dualWeightsList += childDualWeightsList
+                weightGradsList = weightGradsList[childModule.atoms :]
         else:
-            d_w = [0 * grad_weight for grad_weight in grad_w]
-        return d_w
+            dualWeightsList = [
+                0 * gradWeightMatrix for gradWeightMatrix in weightGradsList
+            ]
+        return dualWeightsList
+
 
 class Identity(Bond):
     def __init__(self):
@@ -184,8 +219,9 @@ class Identity(Bond):
         self.smooth = True
         self.sensitivity = 1
 
-    def forward(self, x, w):
-        return x
+    def forward(self, inputData, weightsList):
+        return inputData
+
 
 class Add(Bond):
     def __init__(self):
@@ -193,8 +229,9 @@ class Add(Bond):
         self.smooth = True
         self.sensitivity = 1
 
-    def forward(self, x, w):
-        return sum(x)
+    def forward(self, inputData, weightsList):
+        return sum(inputData)
+
 
 class Mul(Bond):
     def __init__(self, scalar):
@@ -202,5 +239,5 @@ class Mul(Bond):
         self.smooth = True
         self.sensitivity = scalar
 
-    def forward(self, x, w):
-        return x * self.sensitivity
+    def forward(self, inputData, weightsList):
+        return inputData * self.sensitivity
