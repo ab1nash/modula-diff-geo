@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 
 from modula.atom import orthogonalize
+from geometric import RandersMetric  # Import for type hints
 from tests.geometry.generators import (
     random_metric, random_randers_metric, random_spd_matrix
 )
