@@ -13,7 +13,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from geometric import TwistedEmbed, GeometricEmbed, GeometricLinear, Parity
+from diffgeo import TwistedEmbed, GeometricEmbed, GeometricLinear, Parity
 from .utils import SyntheticDatasets
 
 

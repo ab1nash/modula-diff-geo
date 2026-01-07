@@ -15,7 +15,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from geometric import (
+from diffgeo import (
     GeometricLinear, FinslerLinear, TwistedEmbed,
     TensorVariance, Parity, MetricType, GeometricSignature,
     MetricTensor,

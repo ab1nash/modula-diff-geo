@@ -7,7 +7,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from geometric import GeometricLinear
+from diffgeo import GeometricLinear
 
 
 @pytest.mark.hypothesis

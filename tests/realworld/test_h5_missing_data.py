@@ -14,7 +14,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from geometric import GeometricLinear, FinslerLinear
+from diffgeo import GeometricLinear, FinslerLinear
 from modula.atom import Linear
 
 from .utils import (

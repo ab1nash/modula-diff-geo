@@ -32,7 +32,10 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["modula"]
+packages = ["modula", "diffgeo"]
+
+[project.scripts]
+diffgeo = "diffgeo.cli:main"
 
 [project.urls]
 "Homepage" = "https://modula.systems/"
@@ -50,6 +53,7 @@ markers = [
     "phase4: composition tests",
     "phase5: information geometry tests",
     "invariant: mathematical invariant verification",
+    "hypothesis: real-world hypothesis tests (SPD, Finsler, Chirality, Missing Data)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

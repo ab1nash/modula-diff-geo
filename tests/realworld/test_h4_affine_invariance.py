@@ -12,7 +12,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from geometric import GeometricLinear, MetricTensor
+from diffgeo import GeometricLinear, MetricTensor
 from .utils import SyntheticDatasets
 
 

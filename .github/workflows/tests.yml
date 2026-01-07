@@ -41,11 +41,14 @@ jobs:
       - name: Run Phase 2 tests (Dualization)
         run: pytest tests/ -m phase2 -v --tb=short
 
+      - name: Run Realworld Hypothesis tests (H1-H5)
+        run: pytest tests/realworld/ -m hypothesis -v --tb=short
+
       - name: Run all tests
         run: pytest tests/ -v --tb=short
 
       - name: Run tests with coverage
-        run: pytest tests/ --cov=modula --cov-report=xml --cov-report=term-missing
+        run: pytest tests/ --cov=modula --cov=diffgeo --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

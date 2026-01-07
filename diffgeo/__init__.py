@@ -30,9 +30,9 @@ Geometric Atoms (geometric.atoms):
     - ContactAtom: Conservation law projection
 
 Usage:
-    from geometric import GeometricLinear, FinslerLinear, TwistedEmbed
-    from geometric import TensorVariance, Parity, GeometricSignature
-    from geometric import RandersMetric, FinslerDualizer
+    from diffgeo import GeometricLinear, FinslerLinear, TwistedEmbed
+    from diffgeo import TensorVariance, Parity, GeometricSignature
+    from diffgeo import RandersMetric, FinslerDualizer
 
 Reference: Design Documents in ignore-docs/
 """

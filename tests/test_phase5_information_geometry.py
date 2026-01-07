@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 from typing import List
 
-from geometric import (
+from diffgeo import (
     FisherMetric, FisherAtom, fisher_gaussian, fisher_categorical,
     SPDManifold, SPDMetricTensor, SPDClassifier,
     BregmanDivergence, KLDivergence, SquaredEuclidean, ItakuraSaito,

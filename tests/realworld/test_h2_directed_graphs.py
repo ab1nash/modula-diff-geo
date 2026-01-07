@@ -14,7 +14,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from geometric import FinslerLinear, RandersMetric
+from diffgeo import FinslerLinear, RandersMetric
 
 
 @pytest.mark.hypothesis
