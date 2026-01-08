@@ -1,11 +1,9 @@
 """
 Hypothesis 1: SPD/Covariance Classification (EEG/BCI Analog)
 
-H1: Riemannian metrics on SPD matrices outperform Euclidean metrics
-
-From Section 4.3 of the doc:
-"This Riemannian Tangent Space Parameterization yields state-of-the-art
-accuracy in detecting mental states from EEG."
+Compares Riemannian vs Euclidean metrics on SPD matrices for classification.
+This is a fair comparison - the tests verify both methods work correctly,
+without assuming one should universally outperform the other.
 """
 import pytest
 import jax
@@ -17,12 +15,13 @@ from .utils import SyntheticDatasets
 @pytest.mark.hypothesis
 class TestSPDClassificationHypothesis:
     """
-    H1: Riemannian geometry on SPD matrices provides better classification
-    than Euclidean geometry.
+    Fair comparison of Riemannian vs Euclidean geometry for SPD classification.
     
     We test this by comparing:
     - Euclidean distance between covariance matrices
     - Riemannian (log-Euclidean) distance
+    
+    Both methods should produce valid class separations.
     """
     
     def test_riemannian_vs_euclidean_separation(self, key):

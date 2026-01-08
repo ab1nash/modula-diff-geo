@@ -1,0 +1,23 @@
+# Downloaded datasets - large files, don't commit
+physionet_eeg/
+ghcn_daily/
+cmu_mocap/
+
+# Manual download datasets
+stanford_hardi/
+redwood_3d/
+tum_vi/
+uzh_fpv/
+google_smartphone/
+
+# Raw/temp data
+raw/
+*.tmp
+*.partial
+
+# Keep the loaders and download scripts
+!__init__.py
+!download.py
+!loaders.py
+!.gitignore
+

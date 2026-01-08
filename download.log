@@ -1,0 +1,27 @@
+============================================================
+Downloading Geometric Datasets
+============================================================
+
+Current status:
+  ✓ physionet_eeg: 25 files, 56.5 MB
+  ○ ghcn_daily: 0 files, 0.0 MB
+  ○ cmu_mocap: 0 files, 0.0 MB
+
+------------------------------------------------------------
+[1/3] PhysioNet EEG (SPD Manifold)
+------------------------------------------------------------
+    Downloading: S002/S002R12.edf ✓
+    Downloading: S002/S002R13.edf ✓
+    Downloading: S002/S002R14.edf ✓
+    Downloading: S003/S003R01.edf ✓
+    Downloading: S003/S003R02.edf ✓
+    Downloading: S003/S003R03.edf ✓
+    Downloading: S003/S003R04.edf ✓
+    Downloading: S003/S003R05.edf ✓
+    Downloading: S003/S003R06.edf ✓
+    Downloading: S003/S003R07.edf ✓
+    Downloading: S003/S003R08.edf ✓
+    Downloading: S003/S003R09.edf ✓
+    Downloading: S003/S003R10.edf ✓
+    Downloading: S003/S003R11.edf ✓
+    Downloading: S003/S003R12.edf

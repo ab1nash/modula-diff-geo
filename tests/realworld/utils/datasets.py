@@ -218,4 +218,208 @@ class SyntheticDatasets:
             transforms.append(A)
         
         return jnp.stack(transformed), jnp.stack(transforms)
+    
+    # =========================================================================
+    # EUCLIDEAN-FAVORABLE SCENARIOS
+    # These datasets are designed to test scenarios where Euclidean methods
+    # should perform equally well or better than geometric methods.
+    # =========================================================================
+    
+    @staticmethod
+    def generate_low_rank_data(
+        n_samples: int,
+        dim: int,
+        rank: int,
+        key: jax.Array,
+        noise_level: float = 0.01
+    ) -> jnp.ndarray:
+        """
+        Generate low-rank data that lies near a linear subspace.
+        
+        This is a EUCLIDEAN-FAVORABLE scenario where:
+        - Data lies on/near a flat (linear) manifold
+        - SVD-based methods should excel
+        - Geometric methods have no advantage
+        
+        Use this to verify that geometric methods don't artificially outperform
+        when the data has no inherent geometric structure.
+        
+        Args:
+            n_samples: Number of samples
+            dim: Ambient dimension
+            rank: Intrinsic rank of the data (rank << dim)
+            key: JAX random key
+            noise_level: Gaussian noise standard deviation
+            
+        Returns:
+            data: (n_samples, dim) data matrix with approximate rank `rank`
+        """
+        k1, k2, k3 = jax.random.split(key, 3)
+        
+        # Generate low-rank factors
+        U = jax.random.normal(k1, (n_samples, rank))
+        V = jax.random.normal(k2, (rank, dim))
+        
+        # Low-rank data
+        data = U @ V
+        
+        # Add small Gaussian noise
+        noise = jax.random.normal(k3, (n_samples, dim)) * noise_level
+        data = data + noise
+        
+        return data
+    
+    @staticmethod
+    def generate_gaussian_data(
+        n_samples: int,
+        dim: int,
+        key: jax.Array,
+        mean: float = 0.0,
+        std: float = 1.0
+    ) -> jnp.ndarray:
+        """
+        Generate IID Gaussian data with no geometric structure.
+        
+        This is a EUCLIDEAN-FAVORABLE scenario where:
+        - Data is isotropic Gaussian
+        - No manifold structure exists
+        - All methods should perform similarly
+        - Geometric methods should NOT have an advantage
+        
+        Use this as a baseline to verify fair comparison.
+        
+        Args:
+            n_samples: Number of samples
+            dim: Dimension
+            key: JAX random key
+            mean: Mean of Gaussian
+            std: Standard deviation
+            
+        Returns:
+            data: (n_samples, dim) IID Gaussian samples
+        """
+        data = jax.random.normal(key, (n_samples, dim)) * std + mean
+        return data
+    
+    @staticmethod
+    def generate_near_identity_spd(
+        n_samples: int,
+        dim: int,
+        key: jax.Array,
+        perturbation_scale: float = 0.01
+    ) -> jnp.ndarray:
+        """
+        Generate SPD matrices close to identity (low curvature region).
+        
+        This is a EUCLIDEAN-FAVORABLE scenario where:
+        - Matrices are near the identity (flat region of SPD manifold)
+        - Riemannian curvature effects are minimal
+        - Euclidean and Riemannian metrics approximately coincide
+        - Both methods should perform similarly
+        
+        At the identity matrix I, the SPD manifold is locally flat,
+        so Euclidean operations are valid approximations.
+        
+        Args:
+            n_samples: Number of SPD matrices
+            dim: Matrix dimension
+            key: JAX random key
+            perturbation_scale: How far from identity (smaller = flatter)
+            
+        Returns:
+            matrices: (n_samples, dim, dim) SPD matrices near identity
+        """
+        keys = jax.random.split(key, n_samples)
+        matrices = []
+        
+        for i in range(n_samples):
+            # Small symmetric perturbation
+            noise = jax.random.normal(keys[i], (dim, dim)) * perturbation_scale
+            noise = (noise + noise.T) / 2  # Symmetrize
+            
+            # I + small perturbation is SPD if perturbation is small enough
+            # Add small diagonal to ensure positive definiteness
+            matrix = jnp.eye(dim) + noise + 0.1 * perturbation_scale * jnp.eye(dim)
+            matrices.append(matrix)
+        
+        return jnp.stack(matrices)
+    
+    @staticmethod
+    def generate_linear_time_series(
+        n_samples: int,
+        seq_length: int,
+        dim: int,
+        key: jax.Array,
+        trend_strength: float = 0.1
+    ) -> jnp.ndarray:
+        """
+        Generate linear time series data.
+        
+        This is a EUCLIDEAN-FAVORABLE scenario where:
+        - Data follows linear trends
+        - Linear interpolation is optimal
+        - Geodesic interpolation has no advantage
+        
+        Args:
+            n_samples: Number of sequences
+            seq_length: Length of each sequence
+            dim: Feature dimension
+            key: JAX random key
+            trend_strength: Magnitude of linear trend
+            
+        Returns:
+            data: (n_samples, seq_length, dim) linear time series
+        """
+        k1, k2 = jax.random.split(key)
+        
+        # Time points
+        t = jnp.linspace(0, 1, seq_length)
+        
+        # Random starting points and slopes
+        starts = jax.random.normal(k1, (n_samples, dim))
+        slopes = jax.random.normal(k2, (n_samples, dim)) * trend_strength
+        
+        # Generate linear sequences
+        data = []
+        for i in range(n_samples):
+            seq = starts[i] + jnp.outer(t, slopes[i])
+            data.append(seq)
+        
+        return jnp.stack(data)
+    
+    @staticmethod
+    def generate_spherical_near_pole(
+        n_samples: int,
+        key: jax.Array,
+        spread: float = 0.1
+    ) -> jnp.ndarray:
+        """
+        Generate spherical data concentrated near a pole.
+        
+        This is a EUCLIDEAN-FAVORABLE scenario where:
+        - Data is concentrated in a small region of the sphere
+        - Local geometry is approximately flat
+        - Euclidean operations are good approximations
+        
+        Near a pole, the sphere is locally flat, so great circle distances
+        approximately equal Euclidean distances.
+        
+        Args:
+            n_samples: Number of points
+            key: JAX random key
+            spread: Angular spread around pole (radians)
+            
+        Returns:
+            data: (n_samples, 2) lat/lon coordinates near north pole
+        """
+        k1, k2 = jax.random.split(key)
+        
+        # Latitude near pi/2 (north pole)
+        lat = jnp.pi / 2 - jnp.abs(jax.random.normal(k1, (n_samples,))) * spread
+        lat = jnp.clip(lat, -jnp.pi/2, jnp.pi/2)
+        
+        # Longitude uniformly distributed
+        lon = jax.random.uniform(k2, (n_samples,), minval=-jnp.pi, maxval=jnp.pi)
+        
+        return jnp.column_stack([lat, lon])
 

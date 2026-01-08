@@ -14,3 +14,14 @@ examples/data/*
 
 ignore-docs/
 ignore-docs/*
+
+
+data/*
+
+
+results/figures/*
+
+__pycache__/*
+tests/__pycache__/*
+
+*.pyc
