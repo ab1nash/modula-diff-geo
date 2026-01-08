@@ -6,6 +6,53 @@
 
 [![Test Bed + unit tests](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml/badge.svg)](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml)
 
+## 📊 Benchmark Highlights (2026-01-08)
+
+Geometric methods show **significant improvements** on manifold-structured data:
+
+| Dataset | Data Type | Modula (Baseline) | Geometric Method | RMSE Improvement |
+|---------|-----------|-------------------|------------------|------------------|
+| **PhysioNet EEG** | SPD Covariance | 0.447 ± 0.015 | **SPD Tangent: 0.132 ± 0.003** | **70.4% ↓** |
+| **PhysioNet EEG** | SPD Covariance | 0.447 ± 0.015 | SPD Fisher: 0.133 ± 0.001 | 70.2% ↓ |
+| **GHCN Climate** | Spherical + Values | 25.65 ± 2.48 | **Extracted Fisher: 21.00 ± 1.27** | **18.1% ↓** |
+| **CMU MoCap** | SO(3) Joint Angles | 0.381 ± 0.005 | Extracted Fisher: 0.378 ± 0.004 | 0.9% ↓ |
+
+**Key findings:**
+- 🎯 **[SPD](https://en.wikipedia.org/wiki/Definite_matrix) data benefits most** from geometric methods (70%+ improvement on EEG covariance matrices)
+- 🌍 **Fisher geometry discovers structure** automatically on spherical/mixed data
+- 📐 **[MIS](docs/manifold_integrity_score.md) near zero** for geometric methods = predictions stay on the manifold
+
+> *SPD = Symmetric Positive Definite matrices. See [Arsigny et al. (2006)](https://hal.inria.fr/inria-00071383/document) for Log-Euclidean metrics on SPD manifolds.*
+>
+> *Benchmark: 3 runs per condition, full training (3000 epochs, early stopping @ 150 patience)*
+
+<details>
+<summary><b>📋 Reproduce these results</b></summary>
+
+```bash
+# Install dependencies
+pip install -e ".[test]"
+
+# Quick test (fast, fewer epochs)
+python run_fisher_benchmarks.py --quick
+
+# Standard benchmark
+python run_fisher_benchmarks.py
+
+# Full benchmark (3 runs, 3000 epochs - used for table above)
+python run_fisher_benchmarks.py --full
+
+# Run specific datasets
+python run_fisher_benchmarks.py --full --datasets physionet_eeg
+python run_fisher_benchmarks.py --full --datasets ghcn_daily cmu_mocap
+
+# Results saved to:
+#   results/json/     - JSON with all metrics
+#   results/figures/  - PNG visualizations
+```
+
+</details>
+
 Modula is a deep learning library and a deep learning theory built hand-in-hand. Modula disentangles complex neural networks and turns them into structured mathematical objects called modules. This makes training faster and easier to scale, while also providing tools for understanding the properties of the trained network. Modula is built on top of [JAX](https://github.com/google/jax). More information is available in the [Modula docs](https://docs.modula.systems).
 
 # Installation

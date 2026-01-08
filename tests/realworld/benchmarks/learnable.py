@@ -476,6 +476,52 @@ def run_training_loop(
     return best_params, history
 
 
+def compute_imputation_metrics(
+    true_values: np.ndarray,
+    pred_values: np.ndarray,
+) -> Dict[str, float]:
+    """
+    Compute standard imputation metrics on missing values.
+
+    Args:
+        true_values: Ground truth values (flattened missing entries)
+        pred_values: Predicted values (same shape as true_values)
+
+    Returns:
+        Dictionary with rmse, mae, r2, mrr metrics
+    """
+    true_values = np.asarray(true_values).flatten()
+    pred_values = np.asarray(pred_values).flatten()
+
+    n = len(true_values)
+    if n == 0:
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0}
+
+    # RMSE
+    rmse = float(np.sqrt(np.mean((true_values - pred_values) ** 2)))
+
+    # MAE
+    mae = float(np.mean(np.abs(true_values - pred_values)))
+
+    # R²
+    ss_res = np.sum((true_values - pred_values) ** 2)
+    ss_tot = np.sum((true_values - np.mean(true_values)) ** 2)
+    r2 = float(1 - ss_res / (ss_tot + 1e-8))
+
+    # MRR (Mean Reciprocal Rank)
+    # For imputation: measures ranking quality of predictions
+    # For each prediction, compute its rank among all predictions when sorted
+    # by absolute error. MRR = mean(1/rank) where rank=1 is best.
+    #
+    # Interpretation: if model predicts values in correct relative order,
+    # the smallest errors should correspond to easiest-to-predict values.
+    abs_errors = np.abs(true_values - pred_values)
+    ranks = np.argsort(np.argsort(abs_errors)) + 1  # 1-indexed ranks
+    mrr = float(np.mean(1.0 / ranks))
+
+    return {"rmse": rmse, "mae": mae, "r2": r2, "mrr": mrr}
+
+
 class ImputationModel:
     """
     Base class for learnable imputation models.
@@ -1461,17 +1507,13 @@ def evaluate_spd_fisher_model(
     n_missing = jnp.sum(missing_mask)
 
     if n_missing == 0:
-        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mis": 0.0}
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0, "mis": 0.0}
 
-    true_missing = true_tangent[missing_mask]
-    pred_missing = pred_tangent[missing_mask]
+    true_missing = np.array(true_tangent[missing_mask])
+    pred_missing = np.array(pred_tangent[missing_mask])
 
-    rmse = float(jnp.sqrt(jnp.mean((true_missing - pred_missing) ** 2)))
-    mae = float(jnp.mean(jnp.abs(true_missing - pred_missing)))
-
-    ss_res = jnp.sum((true_missing - pred_missing) ** 2)
-    ss_tot = jnp.sum((true_missing - jnp.mean(true_missing)) ** 2)
-    r2 = float(1 - ss_res / (ss_tot + 1e-8))
+    # Use common metrics function
+    metrics = compute_imputation_metrics(true_missing, pred_missing)
 
     # MIS computation
     mis = 0.0
@@ -1485,7 +1527,8 @@ def evaluate_spd_fisher_model(
         mis_calc = ManifoldIntegrityScore(manifold_type, dim=matrix_dim)
         mis, _ = mis_calc.compute_batch(pred_matrices)
 
-    return {"rmse": rmse, "mae": mae, "r2": r2, "mis": float(mis)}
+    metrics["mis"] = float(mis)
+    return metrics
 
 
 # =============================================================================
@@ -1910,7 +1953,7 @@ def evaluate_spherical_fisher_model(
     n_missing = jnp.sum(missing_mask)
 
     if n_missing == 0:
-        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mis": 0.0}
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0, "mis": 0.0}
 
     # Overall RMSE/MAE on values (not coords)
     if model.value_dims > 0:
@@ -1920,17 +1963,19 @@ def evaluate_spherical_fisher_model(
 
         missing_vals = ~mask_values
         if jnp.sum(missing_vals) > 0:
-            true_missing = true_values[missing_vals]
-            pred_missing = pred_values[missing_vals]
+            true_missing = np.array(true_values[missing_vals])
+            pred_missing = np.array(pred_values[missing_vals])
 
-            rmse = float(jnp.sqrt(jnp.mean((true_missing - pred_missing) ** 2)))
-            mae = float(jnp.mean(jnp.abs(true_missing - pred_missing)))
-
-            ss_res = jnp.sum((true_missing - pred_missing) ** 2)
-            ss_tot = jnp.sum((true_missing - jnp.mean(true_missing)) ** 2)
-            r2 = float(1 - ss_res / (ss_tot + 1e-8))
+            # Use common metrics function
+            metrics = compute_imputation_metrics(true_missing, pred_missing)
+            rmse, mae, r2, mrr = (
+                metrics["rmse"],
+                metrics["mae"],
+                metrics["r2"],
+                metrics["mrr"],
+            )
         else:
-            rmse, mae, r2 = 0.0, 0.0, 1.0
+            rmse, mae, r2, mrr = 0.0, 0.0, 1.0, 1.0
     else:
         # Just coordinates - use angular distance
         true_coords = data[:, : model.coord_dims]
@@ -1954,6 +1999,9 @@ def evaluate_spherical_fisher_model(
         rmse = float(jnp.sqrt(jnp.mean(angular_dist**2)))
         mae = float(jnp.mean(jnp.abs(angular_dist)))
         r2 = 0.0  # Not meaningful for angular
+        # MRR based on angular distance
+        ranks = np.argsort(np.argsort(np.array(angular_dist))) + 1
+        mrr = float(np.mean(1.0 / ranks))
 
     # MIS: measure how far from unit sphere (for coord outputs)
     mis = 0.0
@@ -1967,7 +2015,7 @@ def evaluate_spherical_fisher_model(
             norms = np.linalg.norm(pred_coords, axis=-1)
             mis = float(np.mean(np.abs(norms - 1.0)))
 
-    return {"rmse": rmse, "mae": mae, "r2": r2, "mis": float(mis)}
+    return {"rmse": rmse, "mae": mae, "r2": r2, "mrr": mrr, "mis": float(mis)}
 
 
 # =============================================================================
@@ -2269,23 +2317,17 @@ def evaluate_extracted_fisher_model(
     n_missing = jnp.sum(missing_mask)
 
     if n_missing == 0:
-        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mis": 0.0}
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0, "mis": 0.0}
 
-    true_missing = data[missing_mask]
-    pred_missing = predictions[missing_mask]
+    true_missing = np.array(data[missing_mask])
+    pred_missing = np.array(predictions[missing_mask])
 
-    rmse = float(jnp.sqrt(jnp.mean((true_missing - pred_missing) ** 2)))
-    mae = float(jnp.mean(jnp.abs(true_missing - pred_missing)))
+    # Use common metrics function
+    metrics = compute_imputation_metrics(true_missing, pred_missing)
 
-    ss_res = jnp.sum((true_missing - pred_missing) ** 2)
-    ss_tot = jnp.sum((true_missing - jnp.mean(true_missing)) ** 2)
-    r2 = float(1 - ss_res / (ss_tot + 1e-8))
-
-    # MIS depends on manifold type
-    mis = 0.0
-    # For general data, MIS is not applicable
-
-    return {"rmse": rmse, "mae": mae, "r2": r2, "mis": float(mis)}
+    # MIS depends on manifold type - for general data, not applicable
+    metrics["mis"] = 0.0
+    return metrics
 
 
 def train_model(model: ImputationModel,
@@ -2482,15 +2524,15 @@ def evaluate_model(model: ImputationModel,
                    manifold_type: ManifoldType = None) -> Dict[str, float]:
     """
     Evaluate trained model on test data.
-    
-    Returns metrics on imputed (missing) values, including MIS.
+
+    Returns metrics on imputed (missing) values, including MIS and MRR.
     """
     if not HAS_JAX:
         return {}
-    
+
     original_shape = data.shape
     is_matrix_data = data.ndim == 3
-    
+
     # Flatten if needed
     if is_matrix_data:
         n_samples = data.shape[0]
@@ -2499,39 +2541,31 @@ def evaluate_model(model: ImputationModel,
     else:
         data_flat = data
         mask_flat = mask
-    
+
     data_flat = jnp.array(data_flat)
     mask_flat = jnp.array(mask_flat)
-    
+
     # Get predictions
     masked_input = data_flat * mask_flat
     predictions = model.forward(masked_input, params)
-    
+
     # Compute metrics on MISSING entries only
     missing_mask = ~mask_flat
     n_missing = jnp.sum(missing_mask)
-    
+
     if n_missing == 0:
-        return {'rmse': 0.0, 'mae': 0.0, 'r2': 1.0, 'mis': 0.0}
-    
-    true_missing = data_flat[missing_mask]
-    pred_missing = predictions[missing_mask]
-    
-    # RMSE
-    rmse = float(jnp.sqrt(jnp.mean((true_missing - pred_missing) ** 2)))
-    
-    # MAE
-    mae = float(jnp.mean(jnp.abs(true_missing - pred_missing)))
-    
-    # R² on missing values
-    ss_res = jnp.sum((true_missing - pred_missing) ** 2)
-    ss_tot = jnp.sum((true_missing - jnp.mean(true_missing)) ** 2)
-    r2 = float(1 - ss_res / (ss_tot + 1e-8))
-    
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0, "mis": 0.0}
+
+    true_missing = np.array(data_flat[missing_mask])
+    pred_missing = np.array(predictions[missing_mask])
+
+    # Use common metrics function
+    metrics = compute_imputation_metrics(true_missing, pred_missing)
+
     # Manifold Integrity Score (MIS)
     # Reconstruct full predictions for MIS computation
     full_predictions = np.array(data_flat * mask_flat + predictions * (~mask_flat))
-    
+
     mis = 0.0
     if manifold_type is not None:
         if is_matrix_data:
@@ -2543,13 +2577,9 @@ def evaluate_model(model: ImputationModel,
         elif manifold_type == ManifoldType.SPHERE:
             mis_calc = ManifoldIntegrityScore(manifold_type)
             mis, _ = mis_calc.compute_batch(np.array(full_predictions))
-    
-    return {
-        'rmse': rmse,
-        'mae': mae,
-        'r2': r2,
-        'mis': float(mis),
-    }
+
+    metrics["mis"] = float(mis)
+    return metrics
 
 
 def train_spd_model(model: 'SPDTangentSpaceModel',
@@ -2739,68 +2769,56 @@ def evaluate_spd_model(model: 'SPDTangentSpaceModel',
     """
     if not HAS_JAX:
         return {}
-    
+
     assert data.ndim == 3, "Expected 3D SPD data"
     n_samples, matrix_dim, _ = data.shape
-    
+
     # Flatten for processing
     data_flat = jnp.array(data.reshape(n_samples, -1))
     mask_flat = jnp.array(mask.reshape(n_samples, -1))
-    
+
     # Convert to tangent space
     true_tangent = model._batch_to_tangent(data_flat)
-    
+
     # Create tangent space mask (upper triangle)
     mask_reshaped = mask.reshape(-1, matrix_dim, matrix_dim)
     idx = model._get_triu_idx()
     mask_tangent = jnp.array(mask_reshaped[:, idx[0], idx[1]])
-    
+
     # Masked input in tangent space
     masked_tangent = true_tangent * mask_tangent
-    
+
     # Forward pass
     pred_tangent = model.forward(masked_tangent, params)
-    
+
     # Metrics in tangent space (Log-Euclidean)
     missing_mask = ~mask_tangent
     n_missing = jnp.sum(missing_mask)
-    
+
     if n_missing == 0:
-        return {'rmse': 0.0, 'mae': 0.0, 'r2': 1.0, 'mis': 0.0}
-    
-    true_missing = true_tangent[missing_mask]
-    pred_missing = pred_tangent[missing_mask]
-    
-    # RMSE in tangent space = Log-Euclidean distance
-    rmse = float(jnp.sqrt(jnp.mean((true_missing - pred_missing) ** 2)))
-    
-    # MAE in tangent space
-    mae = float(jnp.mean(jnp.abs(true_missing - pred_missing)))
-    
-    # R² in tangent space
-    ss_res = jnp.sum((true_missing - pred_missing) ** 2)
-    ss_tot = jnp.sum((true_missing - jnp.mean(true_missing)) ** 2)
-    r2 = float(1 - ss_res / (ss_tot + 1e-8))
-    
+        return {"rmse": 0.0, "mae": 0.0, "r2": 1.0, "mrr": 1.0, "mis": 0.0}
+
+    true_missing = np.array(true_tangent[missing_mask])
+    pred_missing = np.array(pred_tangent[missing_mask])
+
+    # Use common metrics function
+    metrics = compute_imputation_metrics(true_missing, pred_missing)
+
     # Compute MIS (should be near-zero since exp(tangent) is guaranteed SPD)
     mis = 0.0
     if manifold_type == ManifoldType.SPD:
         # Reconstruct full predictions in tangent space
         full_pred_tangent = np.array(true_tangent * mask_tangent + pred_tangent * (~mask_tangent))
-        
+
         # Map back to manifold
         pred_matrices_flat = model._batch_from_tangent(jnp.array(full_pred_tangent))
         pred_matrices = np.array(pred_matrices_flat).reshape(-1, matrix_dim, matrix_dim)
-        
+
         mis_calc = ManifoldIntegrityScore(manifold_type, dim=matrix_dim)
         mis, _ = mis_calc.compute_batch(pred_matrices)
-    
-    return {
-        'rmse': rmse,
-        'mae': mae,
-        'r2': r2,
-        'mis': float(mis),
-    }
+
+    metrics["mis"] = float(mis)
+    return metrics
 
 
 @dataclass

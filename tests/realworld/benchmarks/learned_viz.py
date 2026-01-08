@@ -214,17 +214,17 @@ def plot_all_metrics(results: List['LearnedBenchmarkResult'],
     """
     if not HAS_MATPLOTLIB or not results:
         return None
-    
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
-    
+
+    fig, axes = plt.subplots(2, 3, figsize=(figsize[0] * 1.5, figsize[1]))
+
     fractions = [r.missing_fraction for r in results]
-    metrics = ['rmse', 'mae', 'r2', 'mis']
-    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MIS (↓)']
-    
+    metrics = ['rmse', 'mae', 'r2', 'mrr', 'mis']
+    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MRR (↑)', 'MIS (↓)']
+
     # Check if we have std values
     has_std = hasattr(results[0], 'modula_metrics_std') and results[0].modula_metrics_std
-    
-    for ax, metric, title in zip(axes.flat, metrics, titles):
+
+    for ax, metric, title in zip(axes.flat[:len(metrics)], metrics, titles):
         modula_vals = np.array([r.modula_metrics.get(metric, 0) for r in results])
         diffgeo_vals = np.array([r.diffgeo_metrics.get(metric, 0) for r in results])
         
@@ -250,7 +250,11 @@ def plot_all_metrics(results: List['LearnedBenchmarkResult'],
         ax.grid(True, alpha=0.3)
         ax.set_xticks(fractions)
         ax.set_xticklabels([f'{f:.0%}' for f in fractions])
-    
+
+    # Hide unused subplot(s)
+    for ax in axes.flat[len(metrics):]:
+        ax.set_visible(False)
+
     dataset_name = results[0].dataset_name.replace('_', ' ').title()
     timestamp = results[0].timestamp
     n_runs = getattr(results[0], 'n_runs', 1)
@@ -491,14 +495,19 @@ def plot_multi_benchmark(results: List['MultiBenchmarkResult'],
     model_names = list(results[0].model_results.keys())
     n_models = len(model_names)
     
-    # Get colors for each model
+    # Get colors and markers for each model
+    # Markers for colorblind accessibility
+    MARKERS = ['o', 's', '^', 'D', 'v', 'p', 'h', '*', 'X', 'P']
     colors = {}
+    markers = {}
+
     for i, name in enumerate(model_names):
         if model_colors and name in model_colors:
             colors[name] = model_colors[name]
         else:
             colors[name] = _get_model_color(name, i)
-    
+        markers[name] = MARKERS[i % len(MARKERS)]
+
     # ===== TOP LEFT: Training Curves =====
     ax1 = axes[0, 0]
     mid_idx = len(results) // 2
@@ -550,9 +559,9 @@ def plot_multi_benchmark(results: List['MultiBenchmarkResult'],
     for name in model_names:
         rmse_vals = [r.model_results[name].metrics.get('rmse', 0) for r in results]
         rmse_stds = [r.model_results[name].metrics_std.get('rmse', 0) for r in results]
-        
-        ax3.plot(fractions, rmse_vals, 'o-', label=name, color=colors[name],
-                linewidth=2, markersize=8)
+
+        ax3.plot(fractions, rmse_vals, marker=markers[name], linestyle='-', label=name,
+                color=colors[name], linewidth=2, markersize=8)
         if any(s > 0 for s in rmse_stds):
             ax3.fill_between(fractions, 
                            np.array(rmse_vals) - np.array(rmse_stds),
@@ -565,27 +574,26 @@ def plot_multi_benchmark(results: List['MultiBenchmarkResult'],
     ax3.legend(fontsize=9)
     ax3.grid(True, alpha=0.3)
     
-    # ===== BOTTOM RIGHT: Best model at each fraction =====
+    # ===== BOTTOM RIGHT: MRR vs Missing Fraction =====
     ax4 = axes[1, 1]
-    
-    best_models = [r.get_best_model('rmse') for r in results]
-    winner_counts = {name: best_models.count(name) for name in model_names}
-    
-    bars = ax4.bar(winner_counts.keys(), winner_counts.values(),
-                  color=[colors[n] for n in winner_counts.keys()],
-                  edgecolor='black')
-    
-    ax4.set_ylabel('Number of Wins', fontsize=11)
-    ax4.set_title('Best Model by Missing Fraction', fontsize=12, fontweight='bold')
-    ax4.grid(True, alpha=0.3, axis='y')
-    
-    # Add value labels
-    for bar in bars:
-        height = bar.get_height()
-        ax4.annotate(f'{int(height)}',
-                    xy=(bar.get_x() + bar.get_width()/2, height),
-                    xytext=(0, 3), textcoords='offset points',
-                    ha='center', fontsize=12, fontweight='bold')
+
+    for name in model_names:
+        mrr_vals = [r.model_results[name].metrics.get('mrr', 0) for r in results]
+        mrr_stds = [r.model_results[name].metrics_std.get('mrr', 0) for r in results]
+
+        ax4.plot(fractions, mrr_vals, marker=markers[name], linestyle='-', label=name,
+                color=colors[name], linewidth=2, markersize=8)
+        if any(s > 0 for s in mrr_stds):
+            ax4.fill_between(fractions,
+                           np.array(mrr_vals) - np.array(mrr_stds),
+                           np.array(mrr_vals) + np.array(mrr_stds),
+                           color=colors[name], alpha=0.2)
+
+    ax4.set_xlabel('Missing Fraction', fontsize=11)
+    ax4.set_ylabel('MRR', fontsize=11)
+    ax4.set_title('MRR vs Missing Fraction (↑)', fontsize=12, fontweight='bold')
+    ax4.legend(fontsize=9)
+    ax4.grid(True, alpha=0.3)
     
     # Main title
     fig.suptitle(f'Multi-Model Benchmark: {dataset_name}\n{timestamp}',
@@ -605,33 +613,38 @@ def plot_multi_metrics(results: List['MultiBenchmarkResult'],
                        save_path: Optional[Path] = None,
                        figsize: Tuple[int, int] = (14, 10)) -> Optional[plt.Figure]:
     """
-    Plot all metrics (RMSE, MAE, R², MIS) for multi-model comparison.
+    Plot all metrics (RMSE, MAE, R², MRR, MIS) for multi-model comparison.
     """
     if not HAS_MATPLOTLIB or not results:
         return None
-    
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
-    
+
+    fig, axes = plt.subplots(2, 3, figsize=(figsize[0] * 1.5, figsize[1]))
+
     model_names = list(results[0].model_results.keys())
     fractions = [r.missing_fraction for r in results]
-    metrics = ['rmse', 'mae', 'r2', 'mis']
-    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MIS (↓)']
-    
-    # Get colors
+    metrics = ['rmse', 'mae', 'r2', 'mrr', 'mis']
+    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MRR (↑)', 'MIS (↓)']
+
+    # Markers for colorblind accessibility
+    MARKERS = ['o', 's', '^', 'D', 'v', 'p', 'h', '*', 'X', 'P']
+
+    # Get colors and markers
     colors = {}
+    markers = {}
     for i, name in enumerate(model_names):
         if model_colors and name in model_colors:
             colors[name] = model_colors[name]
         else:
             colors[name] = _get_model_color(name, i)
-    
-    for ax, metric, title in zip(axes.flat, metrics, titles):
+        markers[name] = MARKERS[i % len(MARKERS)]
+
+    for ax, metric, title in zip(axes.flat[:len(metrics)], metrics, titles):
         for name in model_names:
             vals = [r.model_results[name].metrics.get(metric, 0) for r in results]
             stds = [r.model_results[name].metrics_std.get(metric, 0) for r in results]
-            
-            ax.plot(fractions, vals, 'o-', label=name, color=colors[name],
-                   linewidth=2, markersize=8)
+
+            ax.plot(fractions, vals, marker=markers[name], linestyle='-', label=name,
+                   color=colors[name], linewidth=2, markersize=8)
             if any(s > 0 for s in stds):
                 ax.fill_between(fractions,
                               np.array(vals) - np.array(stds),
@@ -643,7 +656,11 @@ def plot_multi_metrics(results: List['MultiBenchmarkResult'],
         ax.set_title(title, fontsize=11, fontweight='bold')
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
-    
+
+    # Hide unused subplot(s)
+    for ax in axes.flat[len(metrics):]:
+        ax.set_visible(False)
+
     dataset_name = results[0].dataset_name.replace('_', ' ').title()
     fig.suptitle(f'All Metrics: {dataset_name}\n{results[0].timestamp}',
                  fontsize=14, fontweight='bold', y=0.98)
