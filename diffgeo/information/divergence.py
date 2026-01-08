@@ -362,6 +362,305 @@ def hellinger_distance(p: jnp.ndarray, q: jnp.ndarray) -> float:
     return float(jnp.sqrt(0.5 * jnp.sum((jnp.sqrt(p_safe) - jnp.sqrt(q_safe)) ** 2)))
 
 
+# =============================================================================
+# BREGMAN-FISHER CONNECTION
+# =============================================================================
+#
+# The following functions connect Bregman divergences to Fisher geometry.
+# This is the mathematical bridge between information theory and differential
+# geometry.
+#
+# Key insight from research doc [3]:
+#   "The Fisher Information Matrix is the Hessian of the Bregman generator
+#    for exponential families."
+#
+# Connection to other modules:
+#   - statistical_manifold.py: StatisticalManifold uses Fisher as metric
+#   - information.py: FisherMetric class
+#   - core.py: TensorVariance (Bregman duality ↔ covariant/contravariant)
+#
+# =============================================================================
+
+
+def fisher_from_bregman(bregman: BregmanDivergence, 
+                        point: jnp.ndarray) -> jnp.ndarray:
+    """
+    Extract Fisher metric from Bregman divergence.
+    
+    The Fisher Information Matrix equals the Hessian of the Bregman
+    generating function φ:
+    
+        F_ij(θ) = ∂²φ/∂θ_i∂θ_j
+    
+    This connects Bregman geometry (divergences) to Riemannian geometry
+    (metrics). The local behavior of a Bregman divergence IS the Fisher metric:
+    
+        D_φ(θ + δ || θ) ≈ ½ δᵀ F(θ) δ
+    
+    Args:
+        bregman: BregmanDivergence instance
+        point: Point θ where to compute Fisher metric
+        
+    Returns:
+        Fisher Information Matrix (n x n)
+        
+    Example:
+        >>> kl = KLDivergence()
+        >>> probs = jnp.array([0.3, 0.5, 0.2])
+        >>> fisher = fisher_from_bregman(kl, probs)
+        >>> # For categorical, Fisher is diag(1/p_i)
+    
+    See also:
+        - information.py: FisherMetric class
+        - statistical_manifold.py: StatisticalManifold.fisher_metric
+    """
+    # Fisher = Hessian of the generating function φ
+    hessian_fn = jax.hessian(bregman.phi)
+    return hessian_fn(point)
+
+
+def local_divergence_approximation(bregman: BregmanDivergence,
+                                   center: jnp.ndarray,
+                                   displacement: jnp.ndarray) -> float:
+    """
+    Local quadratic approximation of Bregman divergence.
+    
+    For small δ:
+        D_φ(θ + δ || θ) ≈ ½ δᵀ F(θ) δ
+    
+    This shows the Bregman divergence is locally equivalent to the
+    Fisher-Rao (Riemannian) distance squared.
+    
+    Args:
+        bregman: BregmanDivergence instance
+        center: Reference point θ
+        displacement: Small displacement δ
+        
+    Returns:
+        Quadratic approximation ½ δᵀ F δ
+    """
+    fisher = fisher_from_bregman(bregman, center)
+    return 0.5 * float(displacement @ fisher @ displacement)
+
+
+class DuallyFlatManifold:
+    """
+    A dually flat manifold induced by a Bregman divergence.
+    
+    This is the geometric structure underlying exponential families
+    and connects to information geometry.
+    
+    ==========================================================================
+    THE DUAL STRUCTURE:
+    ==========================================================================
+    
+    A Bregman divergence D_φ induces TWO coordinate systems:
+    
+    1. PRIMAL (θ): Natural parameters
+       - Transforms CONTRAVARIANTLY
+       - Geodesics are straight lines in θ-space
+       
+    2. DUAL (η): Expectation parameters  
+       - η = ∇φ(θ) (gradient of generator)
+       - Transforms COVARIANTLY
+       - Geodesics are straight in η-space
+    
+    The Legendre transform φ*(η) defines the dual generator, and:
+        θ = ∇φ*(η)
+    
+    This duality is exactly the covariant/contravariant distinction!
+    
+    ==========================================================================
+    CONNECTION TO FISHER:
+    ==========================================================================
+    
+    The Fisher metric in both coordinates is:
+        F_ij(θ) = ∂²φ/∂θ_i∂θ_j = ∂η_i/∂θ_j
+        F^ij(η) = ∂²φ*/∂η_i∂η_j = ∂θ_i/∂η_j
+    
+    These are inverses of each other (index raising/lowering).
+    
+    See also:
+        - core.py: TensorVariance.COVARIANT, CONTRAVARIANT
+        - metric.py: MetricTensor.raise_index(), lower_index()
+    """
+    
+    def __init__(self, bregman: BregmanDivergence):
+        """
+        Create dually flat manifold from Bregman divergence.
+        
+        Args:
+            bregman: The generating Bregman divergence
+        """
+        self.bregman = bregman
+        self.phi = bregman.phi
+        self.grad_phi = bregman.grad_phi
+    
+    def primal_to_dual(self, theta: jnp.ndarray) -> jnp.ndarray:
+        """
+        Convert primal coordinates to dual.
+        
+        η = ∇φ(θ)
+        
+        This is the "Legendre map" from contravariant to covariant.
+        """
+        return self.grad_phi(theta)
+    
+    def dual_to_primal(self, eta: jnp.ndarray, 
+                       theta_init: Optional[jnp.ndarray] = None,
+                       max_iter: int = 100,
+                       tol: float = 1e-6) -> jnp.ndarray:
+        """
+        Convert dual coordinates back to primal.
+        
+        θ = ∇φ*(η) = (∇φ)^{-1}(η)
+        
+        Requires solving ∇φ(θ) = η (Newton's method).
+        """
+        # Initialize
+        if theta_init is None:
+            theta = eta.copy()  # Reasonable starting point
+        else:
+            theta = theta_init
+        
+        for _ in range(max_iter):
+            # Current dual coordinates
+            eta_current = self.grad_phi(theta)
+            error = eta_current - eta
+            
+            if jnp.linalg.norm(error) < tol:
+                break
+            
+            # Newton step: Hessian^{-1} @ error
+            hess = jax.hessian(self.phi)(theta)
+            delta = jnp.linalg.solve(hess, error)
+            theta = theta - delta
+        
+        return theta
+    
+    def fisher_metric_primal(self, theta: jnp.ndarray) -> jnp.ndarray:
+        """
+        Fisher metric in primal (θ) coordinates.
+        
+        F_ij = ∂²φ/∂θ_i∂θ_j
+        
+        This is covariant (lower indices).
+        """
+        return fisher_from_bregman(self.bregman, theta)
+    
+    def fisher_metric_dual(self, eta: jnp.ndarray) -> jnp.ndarray:
+        """
+        Fisher metric in dual (η) coordinates.
+        
+        F^ij = ∂²φ*/∂η_i∂η_j
+        
+        This is contravariant (upper indices).
+        For dually flat manifolds, this equals (F_ij)^{-1}.
+        """
+        # First convert to primal
+        theta = self.dual_to_primal(eta)
+        fisher_primal = self.fisher_metric_primal(theta)
+        return jnp.linalg.inv(fisher_primal)
+    
+    def e_geodesic(self, 
+                   theta_0: jnp.ndarray, 
+                   theta_1: jnp.ndarray,
+                   t: float) -> jnp.ndarray:
+        """
+        Exponential (e) geodesic in primal coordinates.
+        
+        These are straight lines in θ-space:
+            γ_e(t) = (1-t)θ_0 + t·θ_1
+        
+        Called "e-geodesic" because exponential families have
+        straight geodesics in natural parameters.
+        """
+        return (1 - t) * theta_0 + t * theta_1
+    
+    def m_geodesic(self,
+                   theta_0: jnp.ndarray,
+                   theta_1: jnp.ndarray, 
+                   t: float) -> jnp.ndarray:
+        """
+        Mixture (m) geodesic in primal coordinates.
+        
+        These are straight lines in η-space (dual coordinates),
+        then mapped back to θ-space.
+        
+        Called "m-geodesic" because mixture families have
+        straight geodesics in expectation parameters.
+        """
+        eta_0 = self.primal_to_dual(theta_0)
+        eta_1 = self.primal_to_dual(theta_1)
+        eta_t = (1 - t) * eta_0 + t * eta_1
+        return self.dual_to_primal(eta_t)
+    
+    def pythagorean_theorem(self,
+                            p: jnp.ndarray,
+                            q: jnp.ndarray,
+                            r: jnp.ndarray) -> Tuple[float, float, float]:
+        """
+        Verify generalized Pythagorean theorem.
+        
+        For Bregman divergences, if r is the e-projection of p onto
+        the e-flat submanifold containing q, then:
+        
+            D(p || q) = D(p || r) + D(r || q)
+        
+        Returns the three divergences for verification.
+        """
+        d_pq = self.bregman(p, q)
+        d_pr = self.bregman(p, r)
+        d_rq = self.bregman(r, q)
+        return d_pq, d_pr, d_rq
+
+
+def bregman_to_statistical_manifold(bregman: BregmanDivergence,
+                                    params: jnp.ndarray,
+                                    samples: Optional[jnp.ndarray] = None):
+    """
+    Create a StatisticalManifold from a Bregman divergence.
+    
+    This bridges the gap between divergence-based (information theory)
+    and metric-based (differential geometry) perspectives.
+    
+    The log-probability is derived from the Bregman generator:
+        log p(x|θ) ∝ θ·T(x) - φ(θ)  (exponential family form)
+    
+    Args:
+        bregman: BregmanDivergence defining the geometry
+        params: Current parameter values θ
+        samples: Data samples (optional, for empirical Fisher)
+        
+    Returns:
+        StatisticalManifold with Fisher metric from Bregman Hessian
+        
+    See also:
+        - statistical_manifold.py: StatisticalManifold class
+    """
+    # Import here to avoid circular dependency
+    from .statistical_manifold import StatisticalManifold
+    from .information import FisherMetric
+    
+    # Compute Fisher from Bregman Hessian
+    fisher_matrix = fisher_from_bregman(bregman, params)
+    fisher = FisherMetric(fisher_matrix, params=params)
+    
+    # Create exponential family log-prob
+    def log_prob(theta, x):
+        # Exponential family: log p ∝ θ·x - φ(θ)
+        return jnp.dot(theta, x) - bregman.phi(theta)
+    
+    manifold = StatisticalManifold(
+        log_prob_fn=log_prob,
+        params=params,
+        _samples=samples
+    )
+    manifold._fisher_metric = fisher
+    
+    return manifold
+
+
 __all__ = [
     'BregmanDivergence',
     'KLDivergence',
@@ -372,5 +671,10 @@ __all__ = [
     'js_divergence',
     'total_variation',
     'hellinger_distance',
+    # New Bregman-Fisher connections
+    'fisher_from_bregman',
+    'local_divergence_approximation',
+    'DuallyFlatManifold',
+    'bregman_to_statistical_manifold',
 ]
 

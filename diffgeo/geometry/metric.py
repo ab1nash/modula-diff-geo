@@ -17,7 +17,7 @@ import jax.numpy as jnp
 from dataclasses import dataclass
 from typing import Optional
 
-from .core import TensorVariance, Parity
+from ..core import TensorVariance, Parity
 
 
 @dataclass

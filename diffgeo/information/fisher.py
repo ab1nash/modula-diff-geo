@@ -24,7 +24,7 @@ import jax.numpy as jnp
 from typing import Callable, Optional, Tuple, List
 from functools import partial
 
-from .metric import MetricTensor
+from ..geometry.metric import MetricTensor
 
 
 class FisherMetric(MetricTensor):

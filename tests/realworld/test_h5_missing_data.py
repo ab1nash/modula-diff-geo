@@ -195,7 +195,9 @@ class TestMissingDataHypothesis:
             geo_total, base_total = 0.0, 0.0
             
             for i, sample in enumerate(data):
-                k_i = jax.random.fold_in(k2, i + hash(pattern.value))
+                # Use abs() and modulo to ensure hash fits in uint32 range
+                pattern_hash = abs(hash(pattern.value)) % (2**31)
+                k_i = jax.random.fold_in(k2, i + pattern_hash)
                 masked = DataMasker.apply_mask(sample, missing_frac, pattern, k_i)
                 
                 geo_out = geo_layer.forward(masked.masked, geo_weights)

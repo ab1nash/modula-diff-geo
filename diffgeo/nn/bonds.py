@@ -19,8 +19,8 @@ from dataclasses import dataclass
 
 from modula.abstract import Bond
 
-from .core import GeometricSignature, TensorVariance, Parity, MetricType
-from .metric import MetricTensor
+from ..core import GeometricSignature, TensorVariance, Parity, MetricType
+from ..geometry.metric import MetricTensor
 
 
 class GeometricBond(Bond):

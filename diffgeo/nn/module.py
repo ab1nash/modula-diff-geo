@@ -19,8 +19,8 @@ from typing import Any, Optional, Union, List
 
 from modula.abstract import Module, Atom, CompositeModule
 
-from .core import GeometricSignature, TensorVariance, Parity
-from .metric import MetricTensor
+from ..core import GeometricSignature, TensorVariance, Parity
+from ..geometry.metric import MetricTensor
 
 
 class GeometricModule(Module):

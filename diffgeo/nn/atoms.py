@@ -22,9 +22,9 @@ from typing import List, Optional
 
 from modula.atom import orthogonalize
 
-from .core import GeometricSignature, TensorVariance, Parity, MetricType
+from ..core import GeometricSignature, TensorVariance, Parity, MetricType
 from .module import GeometricAtom
-from .finsler import RandersMetric, finsler_orthogonalize
+from ..geometry.finsler import RandersMetric, finsler_orthogonalize
 
 
 class GeometricLinear(GeometricAtom):
