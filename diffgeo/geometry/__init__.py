@@ -32,6 +32,21 @@ from .spd import (
     SPDClassifier,
 )
 
+from .lie_groups import (
+    skew_symmetric,
+    vee,
+    so3_exp,
+    so3_log,
+    so3_geodesic,
+    qr_retraction,
+    polar_retraction,
+    cayley_retraction,
+    spd_retraction,
+    is_rotation_matrix,
+    random_rotation,
+    angle_between_rotations,
+)
+
 # StatisticalManifold is in diffgeo.information (due to Fisher dependency)
 # Re-exported here for convenience
 from ..information.manifolds import (
@@ -57,5 +72,18 @@ __all__ = [
     # Statistical Manifold
     'StatisticalManifold',
     'empirical_fisher_from_data',
+    # Lie Groups
+    'skew_symmetric',
+    'vee',
+    'so3_exp',
+    'so3_log',
+    'so3_geodesic',
+    'qr_retraction',
+    'polar_retraction',
+    'cayley_retraction',
+    'spd_retraction',
+    'is_rotation_matrix',
+    'random_rotation',
+    'angle_between_rotations',
 ]
 

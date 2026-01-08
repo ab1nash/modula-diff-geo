@@ -185,6 +185,129 @@ class FisherMetric(MetricTensor):
         """
         nat_grad = self.natural_gradient(gradient)
         return -step_size * nat_grad
+    
+    # =========================================================================
+    # DIAGONAL APPROXIMATION - O(n) operations
+    # =========================================================================
+    
+    def diagonal(self) -> jnp.ndarray:
+        """
+        Return diagonal of Fisher matrix.
+        
+        This is O(n) storage and operations, compared to O(n²) for full matrix.
+        The diagonal approximation is what Adam implicitly uses via its
+        second moment estimation.
+        
+        Returns:
+            1D array of diagonal entries
+            
+        Complexity: O(n)
+        """
+        return jnp.diag(self.matrix)
+    
+    def natural_gradient_diagonal(self, gradient: jnp.ndarray) -> jnp.ndarray:
+        """
+        Diagonal natural gradient approximation.
+        
+        Instead of F^{-1} g (which is O(n³) for matrix inverse),
+        computes g_i / F_ii (which is O(n)).
+        
+        This is the core operation behind Adam-style optimizers:
+            update_i = g_i / sqrt(v_i)
+        where v_i is the running average of g_i².
+        
+        Args:
+            gradient: Euclidean gradient ∇L
+            
+        Returns:
+            Diagonal-approximated natural gradient
+            
+        Complexity: O(n)
+        """
+        diag = jnp.maximum(jnp.diag(self.matrix), 1e-8)
+        return gradient / diag
+    
+    # =========================================================================
+    # SLOPPY MODEL ANALYSIS - Lightweight diagnostics
+    # =========================================================================
+    
+    def effective_dimension(self, threshold: float = 1e-3) -> int:
+        """
+        Count eigenvalues above threshold - identifies 'stiff' directions.
+        
+        In "sloppy" models (common in biology, deep learning), most
+        eigenvalues are very small. The effective dimension counts
+        how many directions are actually constrained by the data.
+        
+        Reference: Machta et al. "Parameter Space Compression Underlies
+        Emergent Theories and Predictive Models" (Science 2013)
+        
+        Args:
+            threshold: Fraction of max eigenvalue to count as "stiff"
+            
+        Returns:
+            Number of eigenvalues above threshold * max_eigenvalue
+            
+        Complexity: O(n²) for symmetric eigendecomposition (one-time)
+        """
+        eigvals = jnp.linalg.eigvalsh(self.matrix)
+        cutoff = threshold * jnp.max(eigvals)
+        return int(jnp.sum(eigvals > cutoff))
+    
+    def condition_number(self) -> float:
+        """
+        Ratio of max/min eigenvalue - measures 'sloppiness'.
+        
+        High condition number (e.g., > 10⁶) indicates:
+        - The model is "sloppy" with many flat directions
+        - Gradient descent will be slow
+        - Natural gradient becomes important
+        
+        Returns:
+            Condition number κ = λ_max / λ_min
+            
+        Complexity: O(n²) for symmetric eigendecomposition
+        """
+        eigvals = jnp.linalg.eigvalsh(self.matrix)
+        min_eigval = jnp.min(jnp.abs(eigvals))
+        max_eigval = jnp.max(jnp.abs(eigvals))
+        return float(max_eigval / (min_eigval + 1e-10))
+    
+    def eigenspectrum(self) -> jnp.ndarray:
+        """
+        Return sorted eigenvalues of Fisher matrix.
+        
+        Useful for visualizing the "sloppiness" of a model.
+        Eigenvalues typically span many orders of magnitude.
+        
+        Returns:
+            Array of eigenvalues, sorted descending
+            
+        Complexity: O(n²) for symmetric eigendecomposition
+        """
+        eigvals = jnp.linalg.eigvalsh(self.matrix)
+        return jnp.sort(eigvals)[::-1]  # Descending order
+    
+    def stiff_directions(self, n_directions: int = 5) -> jnp.ndarray:
+        """
+        Return top eigenvectors (stiff/well-constrained directions).
+        
+        These are the directions in parameter space where the data
+        provides strong constraints. Changes along these directions
+        significantly affect the model predictions.
+        
+        Args:
+            n_directions: Number of top eigenvectors to return
+            
+        Returns:
+            Matrix of shape (n_directions, n_params) - each row is an eigenvector
+            
+        Complexity: O(n²) for symmetric eigendecomposition
+        """
+        eigvals, eigvecs = jnp.linalg.eigh(self.matrix)
+        # Sort by eigenvalue descending
+        idx = jnp.argsort(eigvals)[::-1]
+        return eigvecs[:, idx[:n_directions]].T
 
 
 class FisherAtom:

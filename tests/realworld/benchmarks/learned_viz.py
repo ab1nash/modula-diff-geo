@@ -613,17 +613,17 @@ def plot_multi_metrics(results: List['MultiBenchmarkResult'],
                        save_path: Optional[Path] = None,
                        figsize: Tuple[int, int] = (14, 10)) -> Optional[plt.Figure]:
     """
-    Plot all metrics (RMSE, MAE, R², MRR, MIS) for multi-model comparison.
+    Plot all metrics (RMSE, MAE, R², MIS) for multi-model comparison.
     """
     if not HAS_MATPLOTLIB or not results:
         return None
 
-    fig, axes = plt.subplots(2, 3, figsize=(figsize[0] * 1.5, figsize[1]))
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
 
     model_names = list(results[0].model_results.keys())
     fractions = [r.missing_fraction for r in results]
-    metrics = ['rmse', 'mae', 'r2', 'mrr', 'mis']
-    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MRR (↑)', 'MIS (↓)']
+    metrics = ['rmse', 'mae', 'r2', 'mis']
+    titles = ['RMSE (↓)', 'MAE (↓)', 'R² (↑)', 'MIS (↓)']
 
     # Markers for colorblind accessibility
     MARKERS = ['o', 's', '^', 'D', 'v', 'p', 'h', '*', 'X', 'P']

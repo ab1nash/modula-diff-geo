@@ -114,10 +114,105 @@ class RandersMetric(FinslerNorm):
         return jnp.allclose(self.b, 0)
     
     def dual_norm(self, ell: jnp.ndarray) -> jnp.ndarray:
-        """Compute dual Randers norm F*(ℓ)."""
+        """
+        Compute the complete dual Randers norm F*(ℓ).
+        
+        For Randers metric F(v) = √(v^T A v) + b^T v, the dual norm is:
+        
+            F*(ℓ) = (√(ℓ^T A^{-1} ℓ) - b^T A^{-1} ℓ) / λ
+        
+        where λ = 1 - |b|²_A = 1 - b^T A^{-1} b.
+        
+        This corrects the previous incomplete implementation by including
+        the drift term in the numerator.
+        
+        Complexity: O(n) with cached A_inv
+        
+        Args:
+            ell: Covector in dual space
+            
+        Returns:
+            Dual norm value F*(ℓ)
+        """
         lambda_factor = 1.0 - self.b_norm_A_sq
-        ell_shifted = ell
-        return jnp.sqrt(ell_shifted @ self.A_inv @ ell_shifted) / jnp.sqrt(lambda_factor)
+        lambda_factor = jnp.maximum(lambda_factor, 1e-8)  # Safety for edge cases
+        
+        # A^{-1} ℓ
+        Ainv_ell = self.A_inv @ ell
+        
+        # Riemannian part: √(ℓ^T A^{-1} ℓ)
+        riemannian_part = jnp.sqrt(jnp.maximum(ell @ Ainv_ell, 1e-10))
+        
+        # Drift correction: b^T A^{-1} ℓ
+        drift_part = self.b @ Ainv_ell
+        
+        return (riemannian_part - drift_part) / jnp.sqrt(lambda_factor)
+    
+    def geodesic_midpoint(self, p1: jnp.ndarray, p2: jnp.ndarray) -> jnp.ndarray:
+        """
+        First-order geodesic midpoint approximation.
+        
+        For Finsler metrics, geodesics are direction-dependent. This method
+        computes an approximate midpoint that accounts for the asymmetry
+        induced by the drift vector b.
+        
+        The approximation uses weighted interpolation:
+            m = p1 + displacement / (1 + weight)
+        where weight = F(displacement) / F(-displacement)
+        
+        This is O(n) - just vector operations and norm calls.
+        
+        For symmetric metrics (b=0), this reduces to (p1 + p2) / 2.
+        
+        Args:
+            p1: First point
+            p2: Second point
+            
+        Returns:
+            Approximate geodesic midpoint
+            
+        Complexity: O(n)
+        """
+        displacement = p2 - p1
+        
+        # Forward and backward norms
+        forward_norm = self.norm(displacement)
+        backward_norm = self.norm(-displacement)
+        
+        # Weight factor accounts for asymmetry
+        # If forward is cheaper, midpoint shifts toward p2
+        weight = forward_norm / (backward_norm + 1e-8)
+        
+        return p1 + displacement / (1.0 + weight)
+    
+    def geodesic_interpolate(self, p1: jnp.ndarray, p2: jnp.ndarray, 
+                              t: float) -> jnp.ndarray:
+        """
+        First-order geodesic interpolation at parameter t.
+        
+        Generalization of geodesic_midpoint to arbitrary t ∈ [0, 1].
+        
+        Args:
+            p1: Start point (t=0)
+            p2: End point (t=1)
+            t: Interpolation parameter
+            
+        Returns:
+            Point along approximate geodesic
+            
+        Complexity: O(n)
+        """
+        displacement = p2 - p1
+        
+        # Adjust t based on asymmetry
+        forward_norm = self.norm(displacement)
+        backward_norm = self.norm(-displacement)
+        
+        # Effective t accounting for drift
+        asymmetry_factor = forward_norm / (backward_norm + 1e-8)
+        t_effective = t * (1 + asymmetry_factor) / (1 + t * asymmetry_factor + (1 - t))
+        
+        return p1 + t_effective * displacement
     
     def gradient_of_norm_sq(self, v: jnp.ndarray) -> jnp.ndarray:
         """Compute ∂(F²)/∂v = 2F(v) · ∂F/∂v"""

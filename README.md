@@ -1,10 +1,10 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/modula.svg">
   <source media="(prefers-color-scheme: light)" srcset="assets/modula_light.svg">
-  <img alt="modula logo" src="assets/modula.svg">
+  <img alt="modula logo" src="assets/modula.svg" width="40%">
 </picture>
 
-[![Test Bed + unit tests](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml/badge.svg)](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml)
+[![Tests](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml/badge.svg)](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml)
 
 ## 📊 Benchmark Highlights (2026-01-08)
 
@@ -14,17 +14,33 @@ Geometric methods show **significant improvements** on manifold-structured data:
 |---------|-----------|-------------------|------------------|------------------|
 | **PhysioNet EEG** | SPD Covariance | 0.447 ± 0.015 | **SPD Tangent: 0.132 ± 0.003** | **70.4% ↓** |
 | **PhysioNet EEG** | SPD Covariance | 0.447 ± 0.015 | SPD Fisher: 0.133 ± 0.001 | 70.2% ↓ |
-| **GHCN Climate** | Spherical + Values | 25.65 ± 2.48 | **Extracted Fisher: 21.00 ± 1.27** | **18.1% ↓** |
-| **CMU MoCap** | SO(3) Joint Angles | 0.381 ± 0.005 | Extracted Fisher: 0.378 ± 0.004 | 0.9% ↓ |
+| **CMU MoCap** | SO(3) Joint Angles | 0.386 ± 0.006 | **Extracted Fisher: 0.140 ± 0.004** | **63.7% ↓** |
+| **GHCN Climate** | Spherical + Values | 25.65 ± 2.48 | Extracted Fisher: 21.00 ± 1.27 | 18.1% ↓ |
 
 **Key findings:**
-- 🎯 **[SPD](https://en.wikipedia.org/wiki/Definite_matrix) data benefits most** from geometric methods (70%+ improvement on EEG covariance matrices)
-- 🌍 **Fisher geometry discovers structure** automatically on spherical/mixed data
-- 📐 **[MIS](docs/manifold_integrity_score.md) near zero** for geometric methods = predictions stay on the manifold
+- 🎯 **SPD data benefits most** from geometric methods (70%+ improvement on EEG covariance matrices)
+- 🦴 **SO(3) tangent space processing** dramatically improves motion capture imputation (64%!)
+- 🌍 **Fisher geometry discovers structure** automatically from data
+- 📐 **MIS near zero** for geometric methods = predictions stay on the manifold
 
-> *SPD = Symmetric Positive Definite matrices. See [Arsigny et al. (2006)](https://hal.inria.fr/inria-00071383/document) for Log-Euclidean metrics on SPD manifolds.*
+### What's New (v2)
+
+The `ExtractedFisherModel` now automatically detects and uses appropriate geometry:
+- **SO(3)**: Works in Lie algebra (tangent space) using O(1) Rodrigues formula
+- **SPD**: Log-Euclidean tangent space with Fisher weighting  
+- **Euclidean**: Standard Fisher metric from data covariance
+
+```python
+# Manifold type is declared explicitly (structured, not heuristic)
+from tests.realworld.benchmarks import ExtractedFisherModel, ManifoldType
+
+model = ExtractedFisherModel(input_dim=90, manifold_type=ManifoldType.SO3)
+# Automatically: works in tangent space, scales Fisher properly
+```
+
+> *SPD = Symmetric Positive Definite matrices. See [Arsigny et al. (2006)](https://hal.inria.fr/inria-00071383/document) for Log-Euclidean metrics.*
 >
-> *Benchmark: 3 runs per condition, full training (3000 epochs, early stopping @ 150 patience)*
+> *Benchmark: 2-3 runs per condition, 1000 epochs with early stopping*
 
 <details>
 <summary><b>📋 Reproduce these results</b></summary>
@@ -306,17 +322,35 @@ diffgeo benchmark         # Forward pass performance
 
 ```
 diffgeo/
-├── core.py         # TensorVariance, Parity, MetricType, GeometricSignature
-├── metric.py       # MetricTensor, GeometricVector
-├── finsler.py      # RandersMetric, FinslerDualizer
-├── module.py       # GeometricModule, GeometricAtom base classes
-├── atoms.py        # GeometricLinear, FinslerLinear, TwistedEmbed, ContactAtom
-├── bonds.py        # MetricTransition, ParallelTransport, SymplecticBond
-├── spd.py          # SPDManifold, SPDMetricTensor, SPDClassifier
-├── information.py  # FisherMetric, FisherAtom
-├── divergence.py   # KLDivergence, BregmanDivergence, AlphaDivergence
-└── cli.py          # Command-line interface
+├── core/
+│   └── types.py        # TensorVariance, Parity, MetricType, GeometricSignature
+├── geometry/
+│   ├── metric.py       # MetricTensor, GeometricVector
+│   ├── finsler.py      # RandersMetric, FinslerDualizer, geodesic approximations
+│   ├── lie_groups.py   # SO(3) exp/log (Rodrigues), retractions, parallel transport
+│   ├── manifolds.py    # Base manifold classes
+│   └── spd.py          # SPDManifold, SPDMetricTensor
+├── information/
+│   ├── fisher.py       # FisherMetric with diagonal approx, sloppy model analysis
+│   ├── extractor.py    # DataGeometryExtractor (Fisher from data)
+│   └── divergence.py   # KL, Bregman, Alpha divergences
+├── nn/
+│   ├── module.py       # GeometricModule, GeometricAtom base classes
+│   ├── atoms.py        # GeometricLinear, FinslerLinear, TwistedEmbed
+│   └── bonds.py        # MetricTransition, ParallelTransport
+├── optim/
+│   └── optimizer.py    # GeometricOptimizer with manifold retractions
+└── cli.py              # Command-line interface
 ```
+
+### Computational Complexity
+
+| Operation | Before | After | Method |
+|-----------|--------|-------|--------|
+| SO(3) exp/log | O(n³) eigendecomp | **O(1)** | Rodrigues formula |
+| Natural gradient | O(n³) full inverse | **O(n)** | Diagonal Fisher |
+| Parallel transport | O(n²) | **O(n)** | First-order projection |
+| Retractions | O(n³) exp | **O(n²)** | QR/Polar/Cayley |
 
 ---
 

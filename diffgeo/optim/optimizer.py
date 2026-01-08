@@ -301,6 +301,170 @@ class GeometricOptimizer:
         return decay * fisher_ema + (1 - decay) * outer
     
     # ─────────────────────────────────────────────────────────────────────────
+    # PARALLEL TRANSPORT - O(n) approximation
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    def _transport_momentum_first_order(self,
+                                         momentum: jnp.ndarray,
+                                         delta_params: jnp.ndarray) -> jnp.ndarray:
+        """
+        First-order parallel transport approximation.
+        
+        For small steps on a manifold, parallel transport can be approximated
+        by orthogonal projection:
+        
+            Γ(v) ≈ v - <v, Δθ>/<Δθ, Δθ> · Δθ
+        
+        This removes the component of momentum parallel to the step direction,
+        which is the first-order correction for curved manifolds.
+        
+        For Euclidean space (flat manifold), this is identity.
+        For curved manifolds, this prevents momentum from "drifting off"
+        the manifold over many steps.
+        
+        Args:
+            momentum: Current momentum vector
+            delta_params: Parameter change from last step
+            
+        Returns:
+            Transported momentum vector
+            
+        Complexity: O(n) - just dot products
+        """
+        delta_norm_sq = jnp.dot(delta_params, delta_params)
+        
+        # Avoid division by zero for stationary points
+        delta_norm_sq_safe = jnp.maximum(delta_norm_sq, 1e-10)
+        
+        # Projection coefficient
+        proj_coeff = jnp.dot(momentum, delta_params) / delta_norm_sq_safe
+        
+        # Remove parallel component
+        return momentum - proj_coeff * delta_params
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # RETRACTION-BASED UPDATES - O(n²) for manifold constraints
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    def _apply_retraction(self, 
+                          params: jnp.ndarray,
+                          update: jnp.ndarray,
+                          manifold_type: str = "euclidean") -> jnp.ndarray:
+        """
+        Apply retraction to ensure updated parameters satisfy manifold constraints.
+        
+        Retractions are cheaper alternatives to the exponential map that still
+        guarantee first-order convergence. They map tangent vectors back to
+        the manifold.
+        
+        Options:
+            - 'euclidean': Simple subtraction, O(n)
+            - 'orthogonal': QR retraction for SO(n)/Stiefel, O(n²)
+            - 'spd': Project to SPD cone, O(n³) but necessary
+            - 'sphere': Normalize to unit sphere, O(n)
+        
+        Args:
+            params: Current parameters
+            update: Gradient-based update (tangent vector)
+            manifold_type: Type of manifold constraint
+            
+        Returns:
+            Updated parameters satisfying manifold constraints
+            
+        Complexity: Depends on manifold_type
+        """
+        new_params = params - self.learning_rate * update
+        
+        if manifold_type == "euclidean":
+            return new_params
+        
+        elif manifold_type == "orthogonal":
+            # QR retraction for rotation/orthogonal matrices
+            from ..geometry.lie_groups import qr_retraction
+            # Note: for retraction, we pass identity as base since we already computed new_params
+            Q, R = jnp.linalg.qr(new_params)
+            # Ensure positive determinant
+            signs = jnp.sign(jnp.diag(R))
+            signs = jnp.where(signs == 0, 1.0, signs)
+            return Q * signs
+        
+        elif manifold_type == "spd":
+            # Project to SPD cone
+            sym = (new_params + new_params.T) / 2
+            eigvals, eigvecs = jnp.linalg.eigh(sym)
+            eigvals = jnp.maximum(eigvals, 1e-6)
+            return eigvecs @ jnp.diag(eigvals) @ eigvecs.T
+        
+        elif manifold_type == "sphere":
+            # Normalize to unit sphere
+            return new_params / (jnp.linalg.norm(new_params) + 1e-10)
+        
+        else:
+            raise ValueError(f"Unknown manifold type: {manifold_type}")
+    
+    def step_with_retraction(self,
+                             state: GeometricOptimizerState,
+                             gradient: jnp.ndarray,
+                             manifold_type: str = "euclidean"
+                             ) -> GeometricOptimizerState:
+        """
+        Optimization step with manifold retraction.
+        
+        Like step(), but ensures the result lies on the specified manifold.
+        
+        Args:
+            state: Current optimizer state
+            gradient: Euclidean gradient
+            manifold_type: Type of manifold ('euclidean', 'orthogonal', 'spd', 'sphere')
+            
+        Returns:
+            Updated state with parameters on manifold
+        """
+        # Convert gradient to update
+        if self.manifold is not None:
+            if self.manifold.is_asymmetric():
+                randers = self.manifold.as_randers_metric()
+                dualizer = FinslerDualizer(randers)
+                update = dualizer.dualize(gradient)
+            else:
+                update = self.manifold.natural_gradient(gradient)
+        else:
+            update = gradient
+        
+        # Apply momentum with transport
+        if self.use_momentum and state.momentum is not None:
+            # Transport previous momentum
+            if state.step > 0:
+                delta = state.params - self.learning_rate * update  # Approximate delta
+                transported = self._transport_momentum_first_order(state.momentum, delta)
+            else:
+                transported = state.momentum
+            
+            momentum = state.momentum_decay * transported + update
+            update = momentum
+        else:
+            momentum = state.momentum
+        
+        # Apply retraction
+        new_params = self._apply_retraction(state.params, update, manifold_type)
+        
+        # Update Fisher EMA if adaptive
+        fisher_ema = state.fisher_ema
+        if self.adaptive_metric and self.manifold is not None:
+            fisher_ema = self._update_fisher_ema(
+                state.fisher_ema, gradient, state.fisher_ema_decay
+            )
+        
+        return GeometricOptimizerState(
+            params=new_params,
+            step=state.step + 1,
+            momentum=momentum,
+            fisher_ema=fisher_ema,
+            momentum_decay=state.momentum_decay,
+            fisher_ema_decay=state.fisher_ema_decay
+        )
+    
+    # ─────────────────────────────────────────────────────────────────────────
     # UTILITY METHODS
     # ─────────────────────────────────────────────────────────────────────────
     

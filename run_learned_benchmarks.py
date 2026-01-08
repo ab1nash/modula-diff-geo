@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 """
-Run Learned Imputation Benchmarks
+DEPRECATED: Use run_fisher_benchmarks.py instead!
 
-Trains and compares Modula (Euclidean) vs DiffGeo (Riemannian) 
+This script is kept for backwards compatibility but is superseded by
+run_fisher_benchmarks.py which uses the CORRECTED Fisher geometry that
+computes Fisher Information from the DATA MANIFOLD (not NN parameters).
+
+Run Learned Imputation Benchmarks (DEPRECATED)
+
+Trains and compares Modula (Euclidean) vs DiffGeo (Riemannian)
 imputation models with proper validation.
 
 Usage:
-    # For AMD ROCm GPU support, set LD_LIBRARY_PATH BEFORE Python:
-    LD_LIBRARY_PATH=/opt/rocm/lib python run_learned_benchmarks.py
-    
-    # CPU mode (default if ROCm not configured):
-    python run_learned_benchmarks.py                    # Standard (5 runs avg)
-    python run_learned_benchmarks.py --quick            # Quick test (1 run)
-    python run_learned_benchmarks.py --thorough         # Best results
+    # RECOMMENDED: Use the Fisher benchmark instead:
+    python run_fisher_benchmarks.py --quick
+    python run_fisher_benchmarks.py --datasets cmu_mocap
+
+    # Legacy usage (deprecated):
+    python run_learned_benchmarks.py --quick
 """
+import warnings
+
+warnings.warn(
+    "run_learned_benchmarks.py is DEPRECATED. Use run_fisher_benchmarks.py instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 import argparse
 import sys
 from datetime import datetime
@@ -346,4 +358,3 @@ Examples:
 
 if __name__ == '__main__':
     main()
-

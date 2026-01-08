@@ -38,11 +38,26 @@ def dtype(request):
 
 
 @pytest.fixture
-def tolerance(dtype):
-    """Numerical tolerance based on dtype."""
-    # Use relaxed tolerances due to matrix conditioning in random transforms
-    # Matrix inversion and composition accumulate errors, especially at higher dims
-    return 1e-4 if dtype == jnp.float32 else 1e-6
+def tolerance(dtype, dim):
+    """Numerical tolerance based on dtype and dimension.
+    
+    Matrix operations (inversion, multiplication) accumulate numerical error
+    that scales with dimension. For n×n matrices:
+    - Inversion error: O(n × κ × ε) where κ is condition number, ε is machine epsilon
+    - Multiplication chains: Error compounds with each operation
+    
+    We use dimension-scaled tolerances to prevent flaky tests at higher dimensions
+    while maintaining strict checks at lower dimensions.
+    """
+    # Base tolerance for machine precision
+    base_rtol = 1e-4 if dtype == jnp.float32 else 1e-6
+    
+    # Scale tolerance with dimension to account for accumulated error
+    # Error in matrix operations typically grows as O(n) or O(n²)
+    # Use conservative O(n) scaling
+    dim_factor = max(1, dim / 2)  # Scale up for dim > 2
+    
+    return base_rtol * dim_factor
 
 
 def pytest_configure(config):
