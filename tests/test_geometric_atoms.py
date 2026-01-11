@@ -74,80 +74,85 @@ class TestGeometricLinear:
 @pytest.mark.phase3
 class TestFinslerLinear:
     """Test FinslerLinear atom with asymmetric metrics."""
-    
+
     def test_signature_is_finsler(self):
         """FinslerLinear should have Finsler metric type."""
         layer = FinslerLinear(16, 8)
         assert layer.signature.metric_type == MetricType.FINSLER
-    
+
     def test_initialize_produces_weights_and_drift(self, key):
         """FinslerLinear should initialize both W and drift."""
         layer = FinslerLinear(16, 8)
         weights = layer.initialize(key)
-        
+
         assert len(weights) == 2
         assert weights[0].shape == (16, 8)  # W
         assert weights[1].shape == (16, 8)  # drift
-    
+
     def test_drift_has_bounded_norm(self, key):
         """Drift should have norm < 1 for valid Randers metric."""
         layer = FinslerLinear(16, 8, drift_strength=0.5)
         weights = layer.initialize(key)
-        
+
         drift_norm = jnp.linalg.norm(weights[1])
         assert drift_norm < 1.0
         assert drift_norm > 0.1  # Should be non-trivial
-    
+
     def test_forward_ignores_drift(self, key):
         """Forward pass should be standard matrix multiply (drift only affects optimization)."""
         k1, k2 = jax.random.split(key)
-        
+
         layer = FinslerLinear(16, 8)
         weights = layer.initialize(k1)
         x = jax.random.normal(k2, shape=(8,))
-        
+
         # Forward is just y = Wx
         y = layer.forward(x, weights)
         y_expected = weights[0] @ x
-        
+
         assert jnp.allclose(y, y_expected)
-    
-    def test_dualize_accounts_for_drift(self, key):
-        """Finsler dualization should be different from standard when drift ≠ 0."""
+
+    def test_dualize_produces_valid_updates(self, key):
+        """FinslerLinear dualize should produce valid W and drift updates."""
         k1, k2 = jax.random.split(key)
-        
-        # High drift for more visible effect
-        finsler_layer = FinslerLinear(16, 8, drift_strength=0.7)
-        geo_layer = GeometricLinear(16, 8)
-        
-        weights_finsler = finsler_layer.initialize(k1)
-        weights_geo = geo_layer.initialize(k1)  # Same key for same W init
-        
-        grad = [jax.random.normal(k2, shape=(16, 8))]
-        grad_finsler = [grad[0], weights_finsler[1]]  # Include drift gradient
-        
-        dual_finsler = finsler_layer.dualize(grad_finsler, targetNorm=1.0)
-        dual_geo = geo_layer.dualize(grad, targetNorm=1.0)
-        
-        # Should be different due to drift
-        # (They may be close but not identical)
-        # We check that Finsler dualization ran without error
-        assert dual_finsler[0].shape == (16, 8)
-    
+
+        layer = FinslerLinear(16, 8, drift_strength=0.5)
+        weights = layer.initialize(k1)
+
+        # Gradient for both W and drift
+        grad_W = jax.random.normal(k2, shape=(16, 8))
+        grad_drift = weights[1]  # Use current drift as gradient
+        grads = [grad_W, grad_drift]
+
+        dual = layer.dualize(grads, targetNorm=1.0)
+
+        # Should return [W_update, drift_update]
+        assert len(dual) == 2, "FinslerLinear should return [W_update, drift_update]"
+        assert dual[0].shape == (16, 8), "W update has correct shape"
+        assert dual[1].shape == (16, 8), "Drift update has correct shape"
+
+        # Updates should be finite
+        assert jnp.all(jnp.isfinite(dual[0])), "W update should be finite"
+        assert jnp.all(jnp.isfinite(dual[1])), "Drift update should be finite"
+
+        # W update should be approximately orthogonal (scaled)
+        Q = dual[0] / jnp.sqrt(16 / 8)
+        assert jnp.allclose(Q.T @ Q, jnp.eye(8), rtol=0.1, atol=0.05)
+
     def test_project_maintains_constraints(self, key):
         """Project should keep W orthogonal and drift bounded."""
         layer = FinslerLinear(16, 8)
-        
+
         # Start with random (possibly invalid) weights
         W = jax.random.normal(key, shape=(16, 8)) * 2  # Not orthogonal
         drift = jax.random.normal(key, shape=(16, 8)) * 2  # Possibly > 1 norm
-        
+
         projected = layer.project([W, drift])
-        
+
         # Check W is approximately orthogonal (scaled)
         Q = projected[0] / jnp.sqrt(16/8)
         assert jnp.allclose(Q.T @ Q, jnp.eye(8), rtol=0.05, atol=0.02)
-        
+
         # Check drift norm is bounded
         assert jnp.linalg.norm(projected[1]) <= 0.96
 
@@ -334,4 +339,3 @@ class TestFinslerDualizer:
         # The dual should exist and be finite
         assert jnp.all(jnp.isfinite(dual))
         assert jnp.linalg.norm(dual) > 0
-

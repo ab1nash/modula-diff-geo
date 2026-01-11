@@ -6,19 +6,26 @@ structure. Each atom declares its geometric signature and implements
 covariant operations.
 
 Key atoms:
-- GeometricLinear: Standard linear with explicit vector→vector signature
-- FinslerLinear: Linear with asymmetric Finsler metric on weight space
+- GeometricLinear: **Abstract base** - same as Modula Linear, adds signature tracking only
+- FinslerLinear: Linear with asymmetric Finsler metric on weight space (USE THIS)
 - TwistedEmbed: Embedding sensitive to orientation (parity = -1)
 - GeometricEmbed: Standard embedding with geometric tracking
 - ContactAtom: Projects onto contact distribution (conservation laws)
 
+For actual geometric dualization (non-Euclidean gradient updates), use:
+- FinslerLinear: Asymmetric metrics with drift vector
+- Any atom with a MetricTensor attached via set_metric()
+
 Reference: Design Document "System Design for Pattern Miner" Sections 4.1-4.3
 """
+
 from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+from abc import ABC
 from typing import List, Optional
+import warnings
 
 from modula.atom import orthogonalize
 
@@ -27,22 +34,42 @@ from .module import GeometricAtom
 from ..geometry.finsler import RandersMetric, finsler_orthogonalize
 
 
-class GeometricLinear(GeometricAtom):
+class GeometricLinear(GeometricAtom, ABC):
     """
-    Linear transformation with explicit geometric signature.
-    
-    This is Modula's Linear atom augmented with geometric type information.
-    The signature specifies that it maps vectors to vectors (contravariant
-    to contravariant), preserving the geometric character.
-    
+    Abstract base: Linear transformation with geometric signature tracking.
+
+    WARNING: This class provides NO geometric dualization beyond base Modula.
+    It uses standard Newton-Schulz orthogonalization (Euclidean metric).
+    For actual geometric gradient transformations, use:
+
+    - FinslerLinear: Asymmetric Finsler metric with learnable drift
+    - Attach a MetricTensor via set_metric() for Riemannian dualization
+
+    This class exists primarily for:
+    - Type-safe geometric composition (signature checking)
+    - Parity tracking through compositions
+    - Testing baseline behavior
+
     Attributes:
         fanin: Input dimension
         fanout: Output dimension
         signature: VECTOR_TO_VECTOR (contravariant → contravariant)
+
+    See Also:
+        FinslerLinear: For asymmetric/directed pattern learning
     """
-    
+
     def __init__(self, fanout: int, fanin: int,
                  parity: Parity = Parity.EVEN):
+        # Warn if instantiated directly (not subclassed)
+        if type(self) is GeometricLinear:
+            warnings.warn(
+                "GeometricLinear provides no geometric dualization (uses Euclidean metric). "
+                "For asymmetric/geometric gradient updates, use FinslerLinear or attach a MetricTensor.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         signature = GeometricSignature(
             domain=TensorVariance.CONTRAVARIANT,
             codomain=TensorVariance.CONTRAVARIANT,
@@ -52,31 +79,31 @@ class GeometricLinear(GeometricAtom):
             dim_out=fanout
         )
         super().__init__(signature)
-        
+
         self.fanin = fanin
         self.fanout = fanout
         self.smooth = True
         self.mass = 1
         self.sensitivity = 1
-    
+
     def forward(self, inputData: jnp.ndarray, 
                 weightsList: List[jnp.ndarray]) -> jnp.ndarray:
         """y = Wx (matrix-vector product)."""
         W = weightsList[0]
         return jnp.einsum("...ij,...j->...i", W, inputData)
-    
+
     def initialize(self, key: jax.Array) -> List[jnp.ndarray]:
         """Initialize with orthogonalized weights."""
         W = jax.random.normal(key, shape=(self.fanout, self.fanin))
         W = orthogonalize(W) * jnp.sqrt(self.fanout / self.fanin)
         return [W]
-    
+
     def project(self, weightsList: List[jnp.ndarray]) -> List[jnp.ndarray]:
         """Project weights back to scaled orthogonal manifold."""
         W = weightsList[0]
         W = orthogonalize(W) * jnp.sqrt(self.fanout / self.fanin)
         return [W]
-    
+
     def dualize(self, weightGradsList: List[jnp.ndarray],
                 targetNorm: float = 1.0) -> List[jnp.ndarray]:
         """Spectral dualization via Newton-Schulz orthogonalization."""
@@ -98,20 +125,25 @@ class FinslerLinear(GeometricAtom):
     
     Reference: Design Document Section 4.1 "The FinslerLinear Atom"
     """
-    
-    def __init__(self, fanout: int, fanin: int,
-                 drift_strength: float = 0.3,
-                 fixed_drift: bool = False):
+
+    def __init__(
+        self,
+        fanout: int,
+        fanin: int,
+        drift_strength: float = 0.3,
+        fixed_drift: bool = False,
+        parity: Parity = Parity.EVEN,
+    ):
         signature = GeometricSignature(
             domain=TensorVariance.CONTRAVARIANT,
             codomain=TensorVariance.CONTRAVARIANT,
-            parity=Parity.EVEN,
+            parity=parity,
             metric_type=MetricType.FINSLER,
             dim_in=fanin,
-            dim_out=fanout
+            dim_out=fanout,
         )
         super().__init__(signature)
-        
+
         self.fanin = fanin
         self.fanout = fanout
         self.drift_strength = drift_strength
@@ -120,32 +152,35 @@ class FinslerLinear(GeometricAtom):
         self.mass = 1
         self.sensitivity = 1
         self._randers_metric: Optional[RandersMetric] = None
-    
+
+        # Override: FinslerLinear has 2 weight tensors (W and drift)
+        self.atoms = 2
+
     def forward(self, inputData: jnp.ndarray,
                 weightsList: List[jnp.ndarray]) -> jnp.ndarray:
         """Forward pass: y = Wx."""
         W = weightsList[0]
         return jnp.einsum("...ij,...j->...i", W, inputData)
-    
+
     def initialize(self, key: jax.Array) -> List[jnp.ndarray]:
         """Initialize weights and drift vector."""
         k1, k2 = jax.random.split(key)
-        
+
         W = jax.random.normal(k1, shape=(self.fanout, self.fanin))
         W = orthogonalize(W) * jnp.sqrt(self.fanout / self.fanin)
-        
+
         drift = jax.random.normal(k2, shape=(self.fanout, self.fanin))
         drift = drift / jnp.linalg.norm(drift) * self.drift_strength
-        
+
         return [W, drift]
-    
+
     def project(self, weightsList: List[jnp.ndarray]) -> List[jnp.ndarray]:
         """Project weights to valid manifold."""
         W = weightsList[0]
         drift = weightsList[1]
-        
+
         W = orthogonalize(W) * jnp.sqrt(self.fanout / self.fanin)
-        
+
         drift_norm = jnp.linalg.norm(drift)
         max_drift = 0.95
         drift = jnp.where(
@@ -153,29 +188,40 @@ class FinslerLinear(GeometricAtom):
             drift * (max_drift / drift_norm),
             drift
         )
-        
+
         return [W, drift]
-    
+
     def dualize(self, weightGradsList: List[jnp.ndarray],
                 targetNorm: float = 1.0) -> List[jnp.ndarray]:
-        """Finsler dualization accounting for drift."""
+        """
+        Finsler dualization accounting for drift.
+
+        Uses finsler_orthogonalize which adds drift-bias before Newton-Schulz
+        orthogonalization. This creates the asymmetric metric structure.
+        """
         gradW = weightGradsList[0]
         gradDrift = weightGradsList[1] if len(weightGradsList) > 1 else None
-        
-        drift = gradDrift if gradDrift is not None else jnp.zeros_like(gradW)
-        
-        shifted_grad = gradW - self.drift_strength * drift
-        dualW = finsler_orthogonalize(shifted_grad, drift.flatten())
+
+        # Get current drift for orthogonalization bias
+        drift = gradDrift if gradDrift is not None else jnp.zeros(self.fanout)
+
+        # Finsler orthogonalization: bias toward drift direction
+        # Using n_iters=3 for speed (default is 6, but 3 is usually sufficient)
+        dualW = finsler_orthogonalize(gradW, drift.flatten(), n_iters=3)
         dualW = dualW * jnp.sqrt(self.fanout / self.fanin) * targetNorm
-        
+
         if self.fixed_drift or gradDrift is None:
-            dualDrift = jnp.zeros_like(drift) if gradDrift is not None else drift
+            dualDrift = (
+                jnp.zeros_like(gradDrift)
+                if gradDrift is not None
+                else jnp.zeros((self.fanout,))
+            )
         else:
             dualDrift = gradDrift / (jnp.linalg.norm(gradDrift) + 1e-8)
             dualDrift = dualDrift * targetNorm * 0.1
-        
+
         return [dualW, dualDrift]
-    
+
     def get_asymmetry(self, weightsList: List[jnp.ndarray]) -> float:
         """Measure the learned asymmetry (drift magnitude)."""
         drift = weightsList[1]
@@ -361,4 +407,3 @@ __all__ = [
     'GeometricEmbed',
     'ContactAtom',
 ]
-

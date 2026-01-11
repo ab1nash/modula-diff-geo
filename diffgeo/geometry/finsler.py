@@ -295,37 +295,50 @@ def finsler_orthogonalize(matrix: jnp.ndarray,
     Orthogonalize matrix accounting for Finsler drift.
     
     Modified Newton-Schulz that biases toward drift-aligned directions.
+    JAX-compatible (no Python conditionals on traced values).
     """
-    ns_coeffs = [
-        (3955 / 1024, -8306 / 1024, 5008 / 1024),
-        (3735 / 1024, -6681 / 1024, 3463 / 1024),
-        (3799 / 1024, -6499 / 1024, 3211 / 1024),
-        (4019 / 1024, -6385 / 1024, 2906 / 1024),
-        (2677 / 1024, -3029 / 1024, 1162 / 1024),
-        (2172 / 1024, -1833 / 1024, 682 / 1024),
-    ]
+    ns_coeffs = jnp.array([
+        [3955 / 1024, -8306 / 1024, 5008 / 1024],
+        [3735 / 1024, -6681 / 1024, 3463 / 1024],
+        [3799 / 1024, -6499 / 1024, 3211 / 1024],
+        [4019 / 1024, -6385 / 1024, 2906 / 1024],
+        [2677 / 1024, -3029 / 1024, 1162 / 1024],
+        [2172 / 1024, -1833 / 1024, 682 / 1024],
+    ])
     
+    # Handle transpose via shape check (static, not traced)
     transpose = matrix.shape[1] > matrix.shape[0]
     if transpose:
         matrix = matrix.T
     
-    # Pre-condition with drift
-    drift_magnitude = jnp.linalg.norm(drift)
-    if drift_magnitude > 1e-8:
-        drift_unit = drift / drift_magnitude
-        drift_bias = 0.1 * jnp.outer(
-            drift_unit[:matrix.shape[0]], 
-            drift_unit[:matrix.shape[1]] if matrix.shape[1] <= len(drift_unit) 
-            else jnp.zeros(matrix.shape[1])
-        )
-        matrix = matrix + drift_bias[:matrix.shape[0], :matrix.shape[1]]
+    # Pre-condition with drift (JAX-compatible)
+    drift_magnitude = jnp.linalg.norm(drift) + 1e-10  # Avoid division by zero
+    drift_unit = drift / drift_magnitude
     
-    # Standard Newton-Schulz
-    matrix = matrix / jnp.linalg.norm(matrix)
-    for a, b, c in ns_coeffs:
-        gram = matrix.T @ matrix
+    # Compute drift bias (always computed, scaled by magnitude)
+    drift_row = drift_unit[:matrix.shape[0]]
+    drift_col = jnp.where(
+        jnp.arange(matrix.shape[1]) < len(drift_unit),
+        drift_unit[:matrix.shape[1]] if matrix.shape[1] <= len(drift_unit) else jnp.zeros(matrix.shape[1]),
+        0.0
+    )
+    drift_bias = 0.1 * jnp.outer(drift_row, drift_col)
+    
+    # Scale bias by whether drift is significant (smooth transition)
+    drift_scale = jnp.minimum(drift_magnitude / 1e-8, 1.0)
+    matrix = matrix + drift_scale * drift_bias[:matrix.shape[0], :matrix.shape[1]]
+    
+    # Standard Newton-Schulz (using scan for JAX compatibility)
+    matrix = matrix / (jnp.linalg.norm(matrix) + 1e-10)
+    
+    def ns_step(m, coeffs):
+        a, b, c = coeffs[0], coeffs[1], coeffs[2]
+        gram = m.T @ m
         identity = jnp.eye(gram.shape[0])
-        matrix = matrix @ (a * identity + b * gram + c * gram @ gram)
+        m_new = m @ (a * identity + b * gram + c * gram @ gram)
+        return m_new, None
+    
+    matrix, _ = jax.lax.scan(ns_step, matrix, ns_coeffs)
     
     if transpose:
         matrix = matrix.T

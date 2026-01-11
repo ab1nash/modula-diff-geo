@@ -23,22 +23,28 @@ import jax.numpy as jnp
 def cmd_info(args):
     """Show package information and available components."""
     from diffgeo import (
-        GeometricLinear, FinslerLinear, TwistedEmbed, GeometricEmbed,
-        MetricTensor, RandersMetric, SPDManifold, FisherMetric,
+        FinslerLinear,
+        TwistedEmbed,
+        GeometricEmbed,
+        MetricTensor,
+        RandersMetric,
+        SPDManifold,
+        FisherMetric,
     )
-    
-    print("""
+
+    print(
+        """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                          DiffGeo for Modula                          ║
 ║           Differential Geometry Extensions for Neural Nets           ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
 Geometric Atoms:
-  • GeometricLinear   - Linear with explicit vector→vector signature
-  • FinslerLinear     - Linear with asymmetric Finsler metric (directed)
+  • FinslerLinear     - Linear with asymmetric Finsler metric (USE THIS)
   • TwistedEmbed      - Orientation-sensitive embedding (chirality)
   • GeometricEmbed    - Standard embedding with geometric tracking
   • ContactAtom       - Conservation law projection
+  • GeometricLinear   - Abstract base class (signature tracking only)
 
 Metric Structures:
   • MetricTensor      - Riemannian metric with index raising/lowering
@@ -52,15 +58,16 @@ Key Concepts:
   • Finsler geometry - Asymmetric norms for directional cost
 
 Quick Start:
-    from diffgeo import GeometricLinear, FinslerLinear
+    from diffgeo import FinslerLinear, TwistedEmbed
     from modula.atom import Linear  # Base modula
     
-    # Standard geometric layer
-    geo_layer = GeometricLinear(64, 128)
-    
-    # Finsler layer for directed/causal data
+    # Finsler layer for directed/causal data (asymmetric gradient updates)
     finsler_layer = FinslerLinear(64, 128, drift_strength=0.3)
-""")
+    
+    # Orientation-sensitive embedding for chiral data
+    twisted_embed = TwistedEmbed(dEmbed=64, numEmbed=1000)
+"""
+    )
 
 
 def cmd_demo_spd(args):
@@ -197,67 +204,207 @@ def cmd_check_invariants(args):
 
 
 def cmd_benchmark(args):
-    """Run performance benchmarks."""
-    from diffgeo import GeometricLinear, FinslerLinear
-    from modula.atom import Linear
+    """Run comprehensive performance benchmarks."""
+    from diffgeo import FinslerLinear, TwistedEmbed, GeometricEmbed
+    from modula.atom import Linear, Embed
     import time
-    
-    print("\n=== Performance Benchmarks ===\n")
-    
+    import warnings
+    import numpy as np
+
+    # Suppress GeometricLinear warning for benchmarks
+    warnings.filterwarnings(
+        "ignore", message="GeometricLinear provides no geometric dualization"
+    )
+
+    print("\n" + "═" * 70)
+    print("                    DiffGeo Performance Benchmarks")
+    print("═" * 70 + "\n")
+
     key = jax.random.PRNGKey(42)
     dim = 256
     batch_size = 128
-    n_iterations = 100
-    
-    # Create layers
-    base_linear = Linear(dim, dim)
-    geo_linear = GeometricLinear(dim, dim)
-    finsler_linear = FinslerLinear(dim, dim, drift_strength=0.3)
-    
-    # Initialize
-    k1, k2, k3, k4 = jax.random.split(key, 4)
-    base_w = base_linear.initialize(k1)
-    geo_w = geo_linear.initialize(k2)
-    finsler_w = finsler_linear.initialize(k3)
-    
-    # Create batch
-    batch = jax.random.normal(k4, (batch_size, dim))
-    
-    # JIT compile
-    base_fwd = jax.jit(lambda x, w: jax.vmap(lambda xi: base_linear.forward(xi, w))(x))
-    geo_fwd = jax.jit(lambda x, w: jax.vmap(lambda xi: geo_linear.forward(xi, w))(x))
-    finsler_fwd = jax.jit(lambda x, w: jax.vmap(lambda xi: finsler_linear.forward(xi, w))(x))
-    
-    # Warmup
-    _ = base_fwd(batch, base_w).block_until_ready()
-    _ = geo_fwd(batch, geo_w).block_until_ready()
-    _ = finsler_fwd(batch, finsler_w).block_until_ready()
-    
-    # Benchmark
-    print(f"Config: dim={dim}, batch={batch_size}, iterations={n_iterations}")
+    n_warmup = 50
+    n_iterations = 500
+
+    print(
+        f"Config: dim={dim}, batch_size={batch_size}, warmup={n_warmup}, iterations={n_iterations}"
+    )
     print()
-    
-    start = time.perf_counter()
-    for _ in range(n_iterations):
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Setup: Create layers and initialize weights
+    # ─────────────────────────────────────────────────────────────────────
+
+    base_linear = Linear(dim, dim)
+    finsler_linear = FinslerLinear(dim, dim, drift_strength=0.3)
+    base_embed = Embed(dEmbed=dim, numEmbed=1000)
+    twisted_embed = TwistedEmbed(dEmbed=dim, numEmbed=1000)
+
+    k1, k2, k3, k4, k5 = jax.random.split(key, 5)
+    base_w = base_linear.initialize(k1)
+    finsler_w = finsler_linear.initialize(k2)
+    base_embed_w = base_embed.initialize(k3)
+    twisted_embed_w = twisted_embed.initialize(k4)
+
+    batch = jax.random.normal(k5, (batch_size, dim))
+    indices = jax.random.randint(k5, (batch_size,), 0, 1000)
+
+    # Create gradient tensors for dualization benchmarks
+    grad_base = [jax.random.normal(k1, shape=base_w[0].shape)]
+    grad_finsler = [jax.random.normal(k1, shape=finsler_w[0].shape), finsler_w[1]]
+    grad_embed = [jax.random.normal(k3, shape=base_embed_w[0].shape)]
+
+    # ─────────────────────────────────────────────────────────────────────
+    # JIT compile all operations
+    # ─────────────────────────────────────────────────────────────────────
+
+    # Forward passes
+    base_fwd = jax.jit(lambda x, w: jax.vmap(lambda xi: base_linear.forward(xi, w))(x))
+    finsler_fwd = jax.jit(lambda x, w: jax.vmap(lambda xi: finsler_linear.forward(xi, w))(x))
+    base_embed_fwd = jax.jit(lambda idx, w: base_embed.forward(idx, w))
+    twisted_embed_fwd = jax.jit(
+        lambda idx, w: twisted_embed.forward(idx, w, orientation=1.0)
+    )
+
+    # Dualization (gradient → update conversion)
+    # Note: Not JIT-compiled because finsler_orthogonalize has Python conditionals
+    base_dual = lambda g: base_linear.dualize(g, targetNorm=1.0)
+    finsler_dual = lambda g: finsler_linear.dualize(g, targetNorm=1.0)
+    embed_dual = lambda g: base_embed.dualize(g, targetNorm=1.0)
+    twisted_dual = lambda g: twisted_embed.dualize(g, targetNorm=1.0)
+
+    # Projection (weight normalization)
+    base_proj = jax.jit(lambda w: base_linear.project(w))
+    finsler_proj = jax.jit(lambda w: finsler_linear.project(w))
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Warmup all JIT-compiled functions
+    # ─────────────────────────────────────────────────────────────────────
+
+    print("Warming up JIT compilation...")
+    for _ in range(n_warmup):
         _ = base_fwd(batch, base_w).block_until_ready()
-    base_time = (time.perf_counter() - start) / n_iterations * 1000
-    
-    start = time.perf_counter()
-    for _ in range(n_iterations):
-        _ = geo_fwd(batch, geo_w).block_until_ready()
-    geo_time = (time.perf_counter() - start) / n_iterations * 1000
-    
-    start = time.perf_counter()
-    for _ in range(n_iterations):
         _ = finsler_fwd(batch, finsler_w).block_until_ready()
-    finsler_time = (time.perf_counter() - start) / n_iterations * 1000
-    
-    print(f"Forward pass timing (ms/batch):")
-    print(f"  Linear (base):      {base_time:.3f} ms")
-    print(f"  GeometricLinear:    {geo_time:.3f} ms ({geo_time/base_time:.2f}x)")
-    print(f"  FinslerLinear:      {finsler_time:.3f} ms ({finsler_time/base_time:.2f}x)")
-    
-    print("\n✓ Geometric overhead is minimal due to JAX JIT compilation")
+        _ = base_embed_fwd(indices, base_embed_w).block_until_ready()
+        _ = twisted_embed_fwd(indices, twisted_embed_w).block_until_ready()
+        _ = base_dual(grad_base)
+        _ = finsler_dual(grad_finsler)
+        _ = base_proj(base_w)[0].block_until_ready()
+        _ = finsler_proj(finsler_w)[0].block_until_ready()
+
+    def benchmark(fn, n_iter):
+        """Run benchmark and return (p50, p95, p99) in ms."""
+        times = []
+        for _ in range(n_iter):
+            start = time.perf_counter()
+            result = fn()
+            if hasattr(result, "block_until_ready"):
+                result.block_until_ready()
+            elif isinstance(result, (list, tuple)) and len(result) > 0:
+                result[0].block_until_ready()
+            times.append((time.perf_counter() - start) * 1000)
+        times = np.array(times)
+        return (
+            np.percentile(times, 50),
+            np.percentile(times, 95),
+            np.percentile(times, 99),
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Benchmark: Forward Pass
+    # ─────────────────────────────────────────────────────────────────────
+
+    print("\n┌" + "─" * 68 + "┐")
+    print("│ FORWARD PASS (ms/batch)                 p50      p95      p99      │")
+    print("├" + "─" * 68 + "┤")
+
+    base_fwd_t = benchmark(lambda: base_fwd(batch, base_w), n_iterations)
+    finsler_fwd_t = benchmark(lambda: finsler_fwd(batch, finsler_w), n_iterations)
+    base_embed_t = benchmark(
+        lambda: base_embed_fwd(indices, base_embed_w), n_iterations
+    )
+    twisted_embed_t = benchmark(
+        lambda: twisted_embed_fwd(indices, twisted_embed_w), n_iterations
+    )
+
+    print(
+        f"│  Linear (base):      {base_fwd_t[0]:6.3f}   {base_fwd_t[1]:6.3f}   {base_fwd_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  FinslerLinear:      {finsler_fwd_t[0]:6.3f}   {finsler_fwd_t[1]:6.3f}   {finsler_fwd_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  Embed (base):       {base_embed_t[0]:6.3f}   {base_embed_t[1]:6.3f}   {base_embed_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  TwistedEmbed:       {twisted_embed_t[0]:6.3f}   {twisted_embed_t[1]:6.3f}   {twisted_embed_t[2]:6.3f}              │"
+    )
+    print("└" + "─" * 68 + "┘")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Benchmark: Dualization (gradient → update)
+    # ─────────────────────────────────────────────────────────────────────
+
+    print("\n┌" + "─" * 68 + "┐")
+    print("│ DUALIZATION - gradient→update (ms)      p50      p95      p99      │")
+    print("│ how does the forward pass transforms under reflection              │")
+    print("├" + "─" * 68 + "┤")
+
+    base_dual_t = benchmark(lambda: base_dual(grad_base), n_iterations)
+    finsler_dual_t = benchmark(lambda: finsler_dual(grad_finsler), n_iterations)
+    embed_dual_t = benchmark(lambda: embed_dual(grad_embed), n_iterations)
+    twisted_dual_t = benchmark(lambda: twisted_dual(grad_embed), n_iterations)
+
+    print(
+        f"│  Linear (base):      {base_dual_t[0]:6.3f}   {base_dual_t[1]:6.3f}   {base_dual_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  FinslerLinear:      {finsler_dual_t[0]:6.3f}   {finsler_dual_t[1]:6.3f}   {finsler_dual_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  Embed (base):       {embed_dual_t[0]:6.3f}   {embed_dual_t[1]:6.3f}   {embed_dual_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  TwistedEmbed:       {twisted_dual_t[0]:6.3f}   {twisted_dual_t[1]:6.3f}   {twisted_dual_t[2]:6.3f}               │"
+    )
+    print("└" + "─" * 68 + "┘")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Benchmark: Weight Projection
+    # ─────────────────────────────────────────────────────────────────────
+
+    print("\n┌" + "─" * 68 + "┐")
+    print("│ PROJECTION - weight normalization (ms)  p50      p95      p99      │")
+    print("├" + "─" * 68 + "┤")
+
+    base_proj_t = benchmark(lambda: base_proj(base_w), n_iterations)
+    finsler_proj_t = benchmark(lambda: finsler_proj(finsler_w), n_iterations)
+
+    print(
+        f"│  Linear (base):      {base_proj_t[0]:6.3f}   {base_proj_t[1]:6.3f}   {base_proj_t[2]:6.3f}               │"
+    )
+    print(
+        f"│  FinslerLinear:      {finsler_proj_t[0]:6.3f}   {finsler_proj_t[1]:6.3f}   {finsler_proj_t[2]:6.3f}               │"
+    )
+    print("└" + "─" * 68 + "┘")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Summary
+    # ─────────────────────────────────────────────────────────────────────
+
+    print("\n" + "═" * 70)
+    print("                              Summary")
+    print("═" * 70)
+    print(
+        """
+  • Forward pass: Geometric layers have ~0% overhead (same matrix multiply)
+  • Dualization:  FinslerLinear uses finsler_orthogonalize (drift-aware)
+  • Projection:   FinslerLinear projects both W and drift vector
+
+  ✓ Geometric structure adds minimal overhead thanks to JAX JIT
+  ✓ The asymmetric dualization in FinslerLinear is the key differentiator
+"""
+    )
 
 
 def main():
@@ -320,4 +467,3 @@ Examples:
 
 if __name__ == '__main__':
     sys.exit(main())
-

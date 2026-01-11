@@ -59,13 +59,15 @@ markers = [
     "phase5: information geometry tests",
     "invariant: mathematical invariant verification",
     "hypothesis: real-world hypothesis tests (SPD, Finsler, Chirality, Missing Data)",
+    "geometric_transformer: geometric transformer architecture tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
+    "ignore:GeometricLinear provides no geometric dualization:UserWarning",
 ]
 
 [tool.coverage.run]
-source = ["modula"]
+source = ["diffgeo", "modula"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

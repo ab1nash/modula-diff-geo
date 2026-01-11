@@ -24,7 +24,7 @@ Information Geometry (diffgeo.information):
 
 Neural Network (diffgeo.nn):
     - GeometricModule: Module with geometric signature tracking
-    - GeometricLinear: Linear with explicit vector→vector signature
+    - GeometricLinear[ABC]: Linear with explicit vector→vector signature
     - FinslerLinear: Linear with asymmetric Finsler metric
     - GeometricBond: Connections handling metric transitions
 
@@ -34,7 +34,7 @@ Optimization (diffgeo.optim):
     - FinslerOptimizer: Handles asymmetric geometry
 
 Usage:
-    from diffgeo import GeometricLinear, FinslerLinear, TwistedEmbed
+    from diffgeo import FinslerLinear, TwistedEmbed
     from diffgeo import TensorVariance, Parity, GeometricSignature
     from diffgeo import RandersMetric, FinslerDualizer
 
@@ -129,9 +129,17 @@ from .nn import (
     ParallelTransport,
     SymplecticBond,
     TransportPath,
+    RopeJIT,
     create_transition_bond,
     flat_transport,
     curved_transport,
+    # Transformer
+    GeometricAttention,
+    GeometricGPT,
+    StandardGPTJIT,
+    TwistedEmbedWrapper,
+    create_geometric_gpt,
+    create_chiral_pair,
 )
 
 # =============================================================================
@@ -149,80 +157,88 @@ from .optim import (
 
 __all__ = [
     # Core enums and signatures
-    'TensorVariance',
-    'Parity',
-    'MetricType',
-    'GeometricSignature',
-    'VECTOR_TO_VECTOR',
-    'COVECTOR_TO_COVECTOR',
-    'SCALAR_TO_VECTOR',
-    'INDEX_TO_VECTOR',
+    "TensorVariance",
+    "Parity",
+    "MetricType",
+    "GeometricSignature",
+    "VECTOR_TO_VECTOR",
+    "COVECTOR_TO_COVECTOR",
+    "SCALAR_TO_VECTOR",
+    "INDEX_TO_VECTOR",
     # Geometry - Metric
-    'MetricTensor',
-    'GeometricVector',
+    "MetricTensor",
+    "GeometricVector",
     # Geometry - Finsler
-    'FinslerNorm',
-    'RandersMetric',
-    'FinslerDualizer',
-    'finsler_orthogonalize',
-    'randers_geodesic_distance',
-    'make_randers_spd',
+    "FinslerNorm",
+    "RandersMetric",
+    "FinslerDualizer",
+    "finsler_orthogonalize",
+    "randers_geodesic_distance",
+    "make_randers_spd",
     # Geometry - SPD
-    'SPDManifold',
-    'SPDMetricTensor',
-    'SPDClassifier',
+    "SPDManifold",
+    "SPDMetricTensor",
+    "SPDClassifier",
     # Geometry - Statistical Manifold
-    'StatisticalManifold',
-    'empirical_fisher_from_data',
+    "StatisticalManifold",
+    "empirical_fisher_from_data",
     # Information - Fisher
-    'FisherMetric',
-    'FisherAtom',
-    'fisher_gaussian',
-    'fisher_categorical',
-    'fisher_exponential_family',
+    "FisherMetric",
+    "FisherAtom",
+    "fisher_gaussian",
+    "fisher_categorical",
+    "fisher_exponential_family",
     # Information - Divergences
-    'BregmanDivergence',
-    'KLDivergence',
-    'SquaredEuclidean',
-    'ItakuraSaito',
-    'LogDet',
-    'AlphaDivergence',
-    'js_divergence',
-    'total_variation',
-    'hellinger_distance',
+    "BregmanDivergence",
+    "KLDivergence",
+    "SquaredEuclidean",
+    "ItakuraSaito",
+    "LogDet",
+    "AlphaDivergence",
+    "js_divergence",
+    "total_variation",
+    "hellinger_distance",
     # Information - Bregman-Fisher
-    'fisher_from_bregman',
-    'local_divergence_approximation',
-    'DuallyFlatManifold',
-    'bregman_to_statistical_manifold',
+    "fisher_from_bregman",
+    "local_divergence_approximation",
+    "DuallyFlatManifold",
+    "bregman_to_statistical_manifold",
     # Information - Extractors
-    'DataGeometryExtractor',
-    'SPDGeometryExtractor',
+    "DataGeometryExtractor",
+    "SPDGeometryExtractor",
     # NN - Modules
-    'GeometricModule',
-    'GeometricAtom',
-    'GeometricCompositeModule',
-    'GeometricCompositeAtom',
+    "GeometricModule",
+    "GeometricAtom",
+    "GeometricCompositeModule",
+    "GeometricCompositeAtom",
     # NN - Atoms
-    'GeometricLinear',
-    'FinslerLinear',
-    'TwistedEmbed',
-    'GeometricEmbed',
-    'ContactAtom',
+    "GeometricLinear",
+    "FinslerLinear",
+    "TwistedEmbed",
+    "GeometricEmbed",
+    "ContactAtom",
     # NN - Bonds
-    'GeometricBond',
-    'MetricTransition',
-    'ParallelTransport',
-    'SymplecticBond',
-    'TransportPath',
-    'create_transition_bond',
-    'flat_transport',
-    'curved_transport',
+    "GeometricBond",
+    "MetricTransition",
+    "ParallelTransport",
+    "SymplecticBond",
+    "TransportPath",
+    "RopeJIT",
+    "create_transition_bond",
+    "flat_transport",
+    "curved_transport",
+    # NN - Transformer
+    "GeometricAttention",
+    "GeometricGPT",
+    "StandardGPTJIT",
+    "TwistedEmbedWrapper",
+    "create_geometric_gpt",
+    "create_chiral_pair",
     # Optimization
-    'GeometricOptimizerState',
-    'GeometricOptimizer',
-    'NaturalGradientOptimizer',
-    'FinslerOptimizer',
-    'geometric_sgd_step',
-    'natural_gradient_step',
+    "GeometricOptimizerState",
+    "GeometricOptimizer",
+    "NaturalGradientOptimizer",
+    "FinslerOptimizer",
+    "geometric_sgd_step",
+    "natural_gradient_step",
 ]

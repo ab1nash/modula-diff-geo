@@ -348,6 +348,72 @@ class TransportPath:
 
 
 # =============================================================================
+# JIT-Compatible Rotary Position Embedding
+# =============================================================================
+
+class RopeJIT(Bond):
+    """
+    JIT-compatible Rotary Position Embedding for attention.
+    
+    Unlike modula.bond.Rope, this version computes sin/cos on-the-fly
+    without Python-level caching, making it fully compatible with JAX JIT.
+    
+    The standard Rope uses instance-level caching that stores traced values
+    in Python attributes, which breaks JAX tracing. This version lets JAX
+    handle caching through its XLA compilation.
+    
+    Reference: RoFormer (Su et al., 2021)
+    """
+    
+    def __init__(self, d_head: int, base: int = 10000):
+        """
+        Args:
+            d_head: Dimension per attention head (must be even)
+            base: Base for computing inverse frequencies
+        """
+        super().__init__()
+        self.smooth = True
+        self.sensitivity = 1  # rope is an orthogonal transformation
+        
+        self.d_head = d_head
+        self.rope_dim = d_head // 2
+        self.inverse_frequencies = 1.0 / base ** (jnp.arange(self.rope_dim) / self.rope_dim)
+    
+    def compute_sincos(self, seq_len: int):
+        """
+        Compute sin/cos embeddings for given sequence length.
+        
+        No caching - JAX JIT handles compilation caching automatically.
+        This is actually more efficient under JIT since the computation
+        is fused with the rest of the forward pass.
+        """
+        distance = jnp.arange(seq_len)
+        freqs = jnp.outer(distance, self.inverse_frequencies)  # [seq_len, rope_dim]
+        cos = jnp.expand_dims(jnp.cos(freqs), (0, 1))  # [1, 1, seq_len, rope_dim]
+        sin = jnp.expand_dims(jnp.sin(freqs), (0, 1))  # [1, 1, seq_len, rope_dim]
+        return sin, cos
+    
+    def rotate(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Apply rotary position embedding to input tensor."""
+        batch, n_heads, seq_len, d_head = x.shape
+        assert self.rope_dim == d_head // 2, f"rope_dim {self.rope_dim} != d_head//2 {d_head // 2}"
+        
+        x1 = x[..., self.rope_dim:]  # [batch, n_heads, seq_len, rope_dim]
+        x2 = x[..., :self.rope_dim]  # [batch, n_heads, seq_len, rope_dim]
+        
+        sin, cos = self.compute_sincos(seq_len)
+        y1 = cos * x1 + sin * x2
+        y2 = -sin * x1 + cos * x2
+        
+        return jnp.concat([y1, y2], axis=-1)
+    
+    def forward(self, x, w):
+        """Apply rope to query and key tensors."""
+        q, k = x
+        return self.rotate(q), self.rotate(k)
+
+
+# =============================================================================
 # Utility Functions
 # =============================================================================
 
@@ -374,6 +440,7 @@ __all__ = [
     'ParallelTransport',
     'SymplecticBond',
     'TransportPath',
+    'RopeJIT',
     'create_transition_bond',
     'flat_transport',
     'curved_transport',

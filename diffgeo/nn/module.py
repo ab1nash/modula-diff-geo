@@ -116,7 +116,6 @@ class GeometricAtom(Atom):
     Uses composition rather than multiple inheritance to avoid MRO issues.
     
     Concrete implementations include:
-    - GeometricLinear: Standard linear with explicit signature
     - FinslerLinear: Linear with Finsler (asymmetric) metric
     - TwistedEmbed: Embedding that tracks orientation
     """
