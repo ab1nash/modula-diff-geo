@@ -107,53 +107,109 @@ class TestRandersNorm:
 
 class TestDualNorm:
     """Tests for Randers dual norm F*(ℓ)."""
-    
+
     def test_dual_norm_positive_homogeneity(self):
         """F*(αℓ) = α F*(ℓ) for α > 0."""
         A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
         b = jnp.array([0.1, 0.05])
         metric = RandersMetric(A, b)
-        
+
         key = jax.random.PRNGKey(789)
         ell = jax.random.normal(key, shape=(2,))
-        
+
         for alpha in [0.5, 1.0, 2.0, 3.5]:
             np.testing.assert_allclose(
                 metric.dual_norm(alpha * ell),
                 alpha * metric.dual_norm(ell),
                 atol=1e-5
             )
-    
+
     def test_dual_norm_positive(self):
         """F*(ℓ) > 0 for all nonzero ℓ."""
         A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
         b = jnp.array([0.1, 0.05])
         metric = RandersMetric(A, b)
-        
+
         key = jax.random.PRNGKey(101)
         for _ in range(20):
             key, subkey = jax.random.split(key)
             ell = jax.random.normal(subkey, shape=(2,))
             if jnp.linalg.norm(ell) > 1e-6:
                 assert metric.dual_norm(ell) > 0
-    
+
     def test_dual_norm_reduces_to_riemannian(self):
         """When b=0, dual norm is sqrt(ℓ^T A^{-1} ℓ)."""
         A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
         b = jnp.zeros(2)
         metric = RandersMetric(A, b)
-        
+
         A_inv = jnp.linalg.inv(A)
-        
+
         key = jax.random.PRNGKey(102)
         for _ in range(10):
             key, subkey = jax.random.split(key)
             ell = jax.random.normal(subkey, shape=(2,))
-            
+
             expected = jnp.sqrt(ell @ A_inv @ ell)
             actual = metric.dual_norm(ell)
-            
+
             np.testing.assert_allclose(actual, expected, atol=1e-5)
+
+
+class TestFundamentalTensor:
+    """Tests for fundamental tensor g_{ij}(v) = (1/2) ∂²F²/∂v^i∂v^j."""
+
+    def test_fundamental_tensor_symmetric(self):
+        """Fundamental tensor should be symmetric: g_ij = g_ji."""
+        A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
+        b = jnp.array([0.1, 0.05])
+        metric = RandersMetric(A, b)
+
+        key = jax.random.PRNGKey(200)
+        for _ in range(10):
+            key, subkey = jax.random.split(key)
+            v = jax.random.normal(subkey, shape=(2,))
+            v = v / jnp.linalg.norm(v)  # Normalize
+
+            g = metric.fundamental_tensor(v)
+            np.testing.assert_allclose(g, g.T, atol=1e-6)
+
+    def test_fundamental_tensor_positive_definite(self):
+        """Fundamental tensor should be positive definite for valid metrics."""
+        A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
+        b = jnp.array([0.1, 0.05])
+        metric = RandersMetric(A, b)
+
+        key = jax.random.PRNGKey(201)
+        for _ in range(10):
+            key, subkey = jax.random.split(key)
+            v = jax.random.normal(subkey, shape=(2,))
+            v = v / jnp.linalg.norm(v)
+
+            g = metric.fundamental_tensor(v)
+            eigenvalues = jnp.linalg.eigvalsh(g)
+            assert jnp.all(
+                eigenvalues > 0
+            ), "Fundamental tensor should be positive definite"
+
+    def test_fundamental_tensor_reduces_to_riemannian(self):
+        """When b=0, fundamental tensor should be A (Riemannian metric)."""
+        A = jnp.array([[2.0, 0.5], [0.5, 1.0]])
+        b = jnp.zeros(2)
+        metric = RandersMetric(A, b)
+
+        key = jax.random.PRNGKey(202)
+        for _ in range(5):
+            key, subkey = jax.random.split(key)
+            v = jax.random.normal(subkey, shape=(2,))
+            v = v / jnp.linalg.norm(v)
+
+            g = metric.fundamental_tensor(v)
+            # For Riemannian (b=0), g should be A/||v||_A (direction dependent scaling)
+            # But evaluated at unit vectors, it simplifies
+            # Key property: g is proportional to A
+            g_normalized = g / jnp.trace(g) * jnp.trace(A)
+            np.testing.assert_allclose(g_normalized, A, atol=1e-4)
 
 
 class TestFinslerDualizer:
@@ -343,4 +399,3 @@ class TestFinslerUtilities:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

@@ -6,6 +6,8 @@
 
 [![Tests](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml/badge.svg)](https://github.com/ab1nash/modula-diff-geo/actions/workflows/tests.yml)
 
+> **📚 New here?** See the [**Getting Started Guide**](docs/GETTING_STARTED.md) for a comprehensive introduction to DiffGeo's features and architecture.
+
 ## 📊 Benchmark Highlights (2026-01-08)
 
 Geometric methods show **significant improvements** on manifold-structured data:

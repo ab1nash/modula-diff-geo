@@ -75,44 +75,44 @@ class RandersMetric(FinslerNorm):
     """
     A: jnp.ndarray  # SPD matrix (n, n)
     b: jnp.ndarray  # Drift vector (n,)
-    
+
     def __post_init__(self):
         """Cache useful quantities."""
         self._A_inv: Optional[jnp.ndarray] = None
         self._b_norm_sq: Optional[float] = None
-    
+
     @property
     def dim(self) -> int:
         return self.A.shape[0]
-    
+
     @property
     def A_inv(self) -> jnp.ndarray:
         """Cached inverse of A."""
         if self._A_inv is None:
             self._A_inv = jnp.linalg.inv(self.A)
         return self._A_inv
-    
+
     @property 
     def b_norm_A_sq(self) -> float:
         """Compute |b|²_A = b^T A^{-1} b."""
         if self._b_norm_sq is None:
             self._b_norm_sq = float(self.b @ self.A_inv @ self.b)
         return self._b_norm_sq
-    
+
     def is_valid(self) -> bool:
         """Check strong convexity: |b|_A < 1."""
         return self.b_norm_A_sq < 1.0
-    
+
     def norm(self, v: jnp.ndarray) -> jnp.ndarray:
         """Compute F(v) = sqrt(v^T A v) + b^T v"""
         riemannian_part = jnp.sqrt(v @ self.A @ v)
         drift_part = self.b @ v
         return riemannian_part + drift_part
-    
+
     def is_symmetric(self) -> bool:
         """Randers is symmetric iff b = 0."""
         return jnp.allclose(self.b, 0)
-    
+
     def dual_norm(self, ell: jnp.ndarray) -> jnp.ndarray:
         """
         Compute the complete dual Randers norm F*(ℓ).
@@ -136,18 +136,18 @@ class RandersMetric(FinslerNorm):
         """
         lambda_factor = 1.0 - self.b_norm_A_sq
         lambda_factor = jnp.maximum(lambda_factor, 1e-8)  # Safety for edge cases
-        
+
         # A^{-1} ℓ
         Ainv_ell = self.A_inv @ ell
-        
+
         # Riemannian part: √(ℓ^T A^{-1} ℓ)
         riemannian_part = jnp.sqrt(jnp.maximum(ell @ Ainv_ell, 1e-10))
-        
+
         # Drift correction: b^T A^{-1} ℓ
         drift_part = self.b @ Ainv_ell
-        
+
         return (riemannian_part - drift_part) / jnp.sqrt(lambda_factor)
-    
+
     def geodesic_midpoint(self, p1: jnp.ndarray, p2: jnp.ndarray) -> jnp.ndarray:
         """
         First-order geodesic midpoint approximation.
@@ -174,17 +174,17 @@ class RandersMetric(FinslerNorm):
         Complexity: O(n)
         """
         displacement = p2 - p1
-        
+
         # Forward and backward norms
         forward_norm = self.norm(displacement)
         backward_norm = self.norm(-displacement)
-        
+
         # Weight factor accounts for asymmetry
         # If forward is cheaper, midpoint shifts toward p2
         weight = forward_norm / (backward_norm + 1e-8)
-        
+
         return p1 + displacement / (1.0 + weight)
-    
+
     def geodesic_interpolate(self, p1: jnp.ndarray, p2: jnp.ndarray, 
                               t: float) -> jnp.ndarray:
         """
@@ -203,51 +203,52 @@ class RandersMetric(FinslerNorm):
         Complexity: O(n)
         """
         displacement = p2 - p1
-        
+
         # Adjust t based on asymmetry
         forward_norm = self.norm(displacement)
         backward_norm = self.norm(-displacement)
-        
+
         # Effective t accounting for drift
         asymmetry_factor = forward_norm / (backward_norm + 1e-8)
         t_effective = t * (1 + asymmetry_factor) / (1 + t * asymmetry_factor + (1 - t))
-        
+
         return p1 + t_effective * displacement
-    
+
     def gradient_of_norm_sq(self, v: jnp.ndarray) -> jnp.ndarray:
         """Compute ∂(F²)/∂v = 2F(v) · ∂F/∂v"""
         norm_A = jnp.sqrt(v @ self.A @ v)
         norm_A_safe = jnp.maximum(norm_A, 1e-8)
         grad_F = (self.A @ v) / norm_A_safe + self.b
         return 2 * self.norm(v) * grad_F
-    
+
     def fundamental_tensor(self, v: jnp.ndarray) -> jnp.ndarray:
-        """Compute the fundamental tensor g_{ij}(v) = (1/2) ∂²F²/∂v^i∂v^j"""
-        norm_A = jnp.sqrt(v @ self.A @ v)
-        norm_A_safe = jnp.maximum(norm_A, 1e-8)
-        
-        Av = self.A @ v
-        outer_term = jnp.outer(Av, Av) / (norm_A_safe ** 3)
-        g = self.A / norm_A_safe - outer_term
-        g = g + self.norm(v) * (self.A / norm_A_safe - outer_term)
-        
-        return g
-    
+        """
+        Compute the fundamental tensor g_{ij}(v) = (1/2) ∂²F²/∂v^i∂v^j.
+
+        Uses JAX autodiff to ensure correctness. For Randers metric,
+        this equals: g = (∇F)(∇F)^T + F·∇²α
+        """
+
+        def f_sq(vec):
+            return 0.5 * (self.norm(vec) ** 2)
+
+        return jax.hessian(f_sq)(v)
+
     @classmethod
     def from_riemannian(cls, A: jnp.ndarray) -> 'RandersMetric':
         """Create Randers metric with zero drift (pure Riemannian)."""
         return cls(A, jnp.zeros(A.shape[0]))
-    
+
     @classmethod
     def with_drift(cls, A: jnp.ndarray, drift_direction: jnp.ndarray, 
                    drift_strength: float = 0.3) -> 'RandersMetric':
         """Create Randers metric with specified drift."""
         assert 0 <= drift_strength < 1, "Drift strength must be in [0, 1)"
-        
+
         A_inv = jnp.linalg.inv(A)
         d_norm = jnp.sqrt(drift_direction @ A_inv @ drift_direction)
         b = drift_direction / d_norm * drift_strength
-        
+
         return cls(A, b)
 
 
@@ -380,4 +381,3 @@ __all__ = [
     'randers_geodesic_distance',
     'make_randers_spd',
 ]
-
